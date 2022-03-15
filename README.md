@@ -22,7 +22,7 @@ Develop a baseline configuration, individually or by group, which shall include 
 
 ### ncas_win10.ps1
 
-powershell```
+```powershell
 PS C:\Users\administrator> $env:APPDATA
 C:\Users\administrator\AppData\Roaming
 PS C:\Users\administrator> Set-ExecutionPolicy -Scope Process Bypass
