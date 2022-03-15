@@ -22,7 +22,7 @@ Develop a baseline configuration, individually or by group, which shall include 
 
 ### ncas_win10.ps1
 
-powershell`
+powershell```
 PS C:\Users\administrator> $env:APPDATA
 C:\Users\administrator\AppData\Roaming
 PS C:\Users\administrator> Set-ExecutionPolicy -Scope Process Bypass
@@ -34,7 +34,7 @@ Gathering security patch information
 Gathering installed software information
 Gathering TCP and UDP Listening Services
 NCAS run finished at Tuesday 03/15/2022 06:44 on SERV-HMI-01
-`
+```
 
 # Contact
 To request assistance or schedule an assessment, please contact Cutaway Security at 'info [@] cutawaysecurity.com'.
