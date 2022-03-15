@@ -1,10 +1,10 @@
 <#
-	ncas_win10.ps1 - NERC CIP Audit Script for Windows 10. This script 
+	ncas_win7.ps1 - NERC CIP Audit Script for Windows 7. This script 
                      will collect data from the system and generate a
                      text and HTML report file, and provide individual
                      output files.
     Author: Don C. Weber (@cutaway)
-    Date:   March 15, 2022
+    Date:   March 16, 2022
 #>
 
 <#
@@ -38,7 +38,7 @@ $sitename            = 'plant1'
 #############################
 # Set up document header information
 #############################
-$script_name         = 'ncas_win10'
+$script_name         = 'ncas_win7'
 $script_version      = '1.0'
 $start_time          = Get-Date -format yyyyMMddHHmmssff
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
@@ -51,14 +51,6 @@ $outfile_stub        = $computername + '_' + $start_time
 $outpath             = "$outdir\$outfile"
 $outpath_stub        = "$outdir\$outfile_stub"
 $outpath_html        = "$outdir\$outhtml"
-
-$Header = @"
-<style>
-TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
-TH {border-width: 1px; padding: 3px; border-style: solid; border-color: black; background-color: #6495ED;}
-TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
-</style>
-"@
 
 #############################
 # Start script
@@ -78,52 +70,65 @@ else
 #############################
 # Document Header
 #############################
-$report_name = "$company_sh NCAS Data: $computername`n"
+$report_name = "$company_sh NCAS Data: $computername`r`n"
 
-$header_name   = "`nComputer Information`n"
-$report_header = "System Name: $computername`n"
-$report_header += "Company: $company_lg`n"
-$report_header += "Assessment Team: $consultant_company`n" # comment this out or rename to team name
-$report_header += "Script Version: $script_name $script_version`n"
-$report_header += "Start Time: $start_time_readable`n"
+$header_name   = "`n# Computer Information`r`n"
+$report_header = "System Name: $computername`r`n"
+$report_header += "Company: $company_lg`r`n"
+$report_header += "Assessment Team: $consultant_company`r`n" # comment this out or rename to team name
+$report_header += "Script Version: $script_name $script_version`r`n"
+$report_header += "Start Time: $start_time_readable`r`n"
 
+# Header info for Text Report
 $report_name | Out-File -FilePath $outpath -Append
-$report_name_HTML = "<h1>$report_name</h1>"
 $header_name+$report_header | Out-File -FilePath $outpath -Append
-#$report_header_HTML = $report_header | ConvertTo-Html -Fragment -PreContent "<h2>Computer Information</h2>"
-$report_header_HTML = "<h2>$header_name</h2><p>" + $report_header.Replace("`n","<br>") + "</p>"
+
+# Header info for HTML Report
+$report_name_HTML = "<html><header></header><body><h1>$report_name</h1>"
+$report_header_HTML = "<h2>" + ($header_name -replace "`r`n","") + "</h2><p>" + ($report_header -replace "`n","<br>") + "</p>"
+
 
 #############################
 # Gather inforamtion about computer version
 #############################
-Write-Output "`n## Computer Version`n" | Out-File -FilePath $outpath -Append
+$sysinfo_header = "`n# Computer Version`n" 
 if ($runstat) {Write-Host "Gathering computer version information"}
 
-$sysinfo = Get-ComputerInfo -Property WindowsProductName,OsVersion,WindowsCurrentVersion,WindowsVersion
-$sysinfo | Format-Table -AutoSize | Out-File -FilePath $outpath -Append
-$sysinfo | Format-Table -AutoSize | Out-File -FilePath $outpath_stub"_sysinfo.txt" -Append
-$sysinfo_HTML = $sysinfo | ConvertTo-Html -Fragment -PreContent "<h2>Computer Version Information</h2>"
+# Grab System info 
+$sysinfo = systeminfo
+$sys_os = $sysinfo | Select-String 'OS'
 
-# Output the old systeminfo file which can be feed into WES-NG for patch vulnerability information
-$sysinfo_orig = systeminfo
-$sysinfo_orig | Format-Table -AutoSize | Out-File -FilePath $outpath_stub"_orig_sysinfo.txt" -Append
+# System info for Text Report
+$sysinfo_header | Out-File -FilePath $outpath -Append
+$sys_os | Out-File -FilePath $outpath -Append
+$sysinfo | Format-Table -AutoSize | Out-File -FilePath $outpath_stub"_orig_sysinfo.txt" -Append
+
+# System info for HTML Report
+$sys_br = foreach ($l in $sys_os){($l -replace "`$","</br>")}
+$sysinfo_HTML = "<h2>" + ($sysinfo_header  -replace "`n","") + "</h2><p>" + $sys_br + "</p>"
 
 #############################
 # Gather inforamtion about security patches
 #############################
-Write-Output "`n## Security Patch Information`n" | Out-File -FilePath $outpath -Append
+$hf_header = "`n## Security Patch Information`n"
 if ($runstat) {Write-Host "Gathering security patch information"}
 
 $hotfixes = Get-Hotfix 
-$hotfixes | Format-Table Description,HotFixID,InstalledOn -AutoSize | Out-File -FilePath $outpath -Append
-$hotfixes | Format-Table Description,HotFixID,InstalledOn -AutoSize | Out-File -FilePath $outpath_stub"_hotfixes.txt" -Append
-$hotfixes_HTML = $hotfixes | ConvertTo-Html -Property Description,HotFixID,InstalledOn -Fragment -PreContent "<h2>Security Patch Information</h2>"
+
+# Hotfix info for Text Report
+$hf_header | Out-File -FilePath $outpath -Append
+$hotfixes | Format-Table Description,HotFixID,InstalledOn -AutoSize | Out-String -Width 4096 | Out-File -FilePath $outpath -Append
+$hotfixes | Format-Table Description,HotFixID,InstalledOn -AutoSize | Out-String -Width 4096 | Out-File -FilePath $outpath_stub"_hotfixes.txt" -Append
+
+# Hotfix info for HTML Report
+$hf_br =  foreach ($l in ($hotfixes | Format-Table Description,HotFixID,InstalledOn -AutoSize | Out-String -Width 4096)){($l -replace "`r","</br>")}
+$hotfix_HTML = "<h2>" + ($hf_header  -replace "`n","") + "</h2><p>" + $hf_br + "</p>"
 
 #############################
 # Gather information about installed software
 # Source: https://devblogs.microsoft.com/scripting/use-powershell-to-quickly-find-installed-software/
 #############################
-Write-Output "`n## Installed Software Information`n" | Out-File -FilePath $outpath -Append
+$sw_header = "`n# Installed Software Information`n"
 if ($runstat) {Write-Host "Gathering installed software information"}
 
 $array = @()
@@ -145,6 +150,7 @@ foreach($key in $subkeys){
     $thisKey=$UninstallKey+”\\”+$key 
     $thisSubKey=$reg.OpenSubKey($thisKey) 
     $obj = New-Object PSObject
+    $obj | Add-Member -MemberType NoteProperty -Name “ComputerName” -Value $computername
     $obj | Add-Member -MemberType NoteProperty -Name “DisplayName” -Value $($thisSubKey.GetValue(“DisplayName”))
     $obj | Add-Member -MemberType NoteProperty -Name “DisplayVersion” -Value $($thisSubKey.GetValue(“DisplayVersion”))
     $obj | Add-Member -MemberType NoteProperty -Name “InstallLocation” -Value $($thisSubKey.GetValue(“InstallLocation”))
@@ -155,59 +161,59 @@ foreach($key in $subkeys){
 $software_versions = $array | Where-Object { $_.DisplayName } `
  | select DisplayName, DisplayVersion, Publisher, InstallLocation `
  | Format-Table -AutoSize | Out-String -Width 4096
+ 
 
+# Software info for Text Report
+$sw_header | Out-File -FilePath $outpath -Append
 $software_versions | Out-File -FilePath $outpath -Append
 $software_versions | Out-File -FilePath $outpath_stub"_software.txt" -Append
-$software_HTML = $array | Where-Object { $_.DisplayName } | ConvertTo-Html -Fragment -PreContent "<h2>Installed Software Information</h2>"
+
+# Software info for HTML Report
+## Have to hack this string to get HTML breaks at the end if each line, plus handle the seperator dashes
+$soft_hack = $array | Where-Object {$_.DisplayName } | Format-Table -Property DisplayName, DisplayVersion, Publisher, InstallLocation, @{Label="</br>";Expression={"</br>"}} -AutoSize | Out-String -Width 4096
+$soft_br = $soft_hack -replace "-----`r","</br>"
+$software_HTML = "<h2>" + ($sw_header  -replace "`n","") + "</h2><p>" + $soft_br + "</p>"
 
 #############################
 # Gather inforamtion about TCP and UDP Listening Services
 # Source: https://jcutrer.com/powershell/network-daemons-parent-processes
 #############################
-Write-Output "`n## Network Connection Information`n" | Out-File -FilePath $outpath -Append
+$net_header = "`n# Network Connection Information`n"
 if ($runstat) {Write-Host "Gathering TCP and UDP Listening Services"}
-$net_servers_HTML = "<h2>Network Connection Information</h2>"
 
-# Make a lookup table by process ID
-$Processes = @{}
-Get-Process | ForEach-Object {
-    $Processes[$_.Id] = $_
+# Query Listening Network Daemons
+$nets = netstat -ano | Select-String -Pattern LISTENING,UDP,PID
+$netconns = foreach($n in $nets){
+    # Process Header line and continue
+    if ($n -match 'PID'){$n -replace "PID","Process"; continue}
+    # make split easier PLUS make it a string instead of a match object:
+    $p = $n -replace ' +',' '
+    # make it an array:
+    $nar = $p.Split(' ')
+    # pick last item:
+    $pname = $(Get-Process -id $nar[-1]).ProcessName
+    $ppath = $(Get-Process -id $nar[-1]).Path
+    # print the modified line with processname instead of PID:
+    if ($ppath){$n -replace "$($nar[-1])`$","$($ppath)"}
+    else {$n -replace "$($nar[-1])`$","$($pname)"}
+    
 }
 
-# Query Listening TCP Daemons
-Write-Output "### TCP Network Servers" | Out-File -FilePath $outpath -Append
-Write-Output "# TCP Network Servers" | Out-File -FilePath $outpath_stub"_network_services.txt" -Append
-$tcpservers = Get-NetTCPConnection | 
-    Where-Object { $_.State -eq "Listen" -and $_.LocalAddress -ne "127.0.0.1" } |
-    Select-Object LocalAddress,
-        LocalPort,
-        @{Name="PID";         Expression={ $_.OwningProcess }},
-        @{Name="ProcessName"; Expression={ $Processes[[int]$_.OwningProcess].ProcessName }}, 
-        @{Name="Path"; Expression={ $Processes[[int]$_.OwningProcess].Path }} |
-    Sort-Object -Property LocalPort, LocalAddress 
-$tcpservers | Format-Table -AutoSize | Out-String -Width 4096 | Out-File -FilePath $outpath -Append
-$tcpservers | Format-Table -AutoSize | Out-String -Width 4096 | Out-File -FilePath $outpath_stub"_network_services.txt" -Append
-$tcp_servers_HTML = $tcpservers | ConvertTo-Html -Fragment -PreContent "<h3>TCP Network Servers</h3>"
+# Network info for Text Report
+$net_header | Out-File -FilePath $outpath -Append
+$netconns | Out-File -FilePath $outpath -Append
+$netconns | Out-File -FilePath $outpath_stub"_network_services.txt" -Append
 
-# Query Listening UDP Daemons
-Write-Output "### UDP Daemons" | Out-File -FilePath $outpath -Append
-Write-Output "# UDP Daemons" | Out-File -FilePath $outpath_stub"_network_services.txt" -Append
-$udpservers = Get-NetUDPEndpoint | 
-    Where-Object { $_.LocalAddress -ne "127.0.0.1" } |
-    Select-Object LocalAddress,
-        LocalPort,
-        @{Name="PID";         Expression={ $_.OwningProcess }},
-        @{Name="ProcessName"; Expression={ $Processes[[int]$_.OwningProcess].ProcessName }}, 
-        @{Name="Path"; Expression={ $Processes[[int]$_.OwningProcess].Path }} |
-    Sort-Object -Property LocalPort, LocalAddress
-$udpservers | Format-Table -AutoSize | Out-String -Width 4096 | Out-File -FilePath $outpath -Append
-$udpservers | Format-Table -AutoSize | Out-String -Width 4096 | Out-File -FilePath $outpath_stub"_network_services.txt" -Append
-$udp_servers_HTML = $udpservers | ConvertTo-Html -Fragment -PreContent "<h3>UDP Network Servers</h3>"
+# Network info for HTML Report
+$net_br = foreach ($l in $netconns){($l + "</br>")}
+$network_HTML = "<h2>" + ($net_header  -replace "`n","") + "</h2><p>" + $net_br + "</p>"
 
+#############################
 # Footer
-Write-Output "## Script Completed`n" | Out-File -FilePath $outpath -Append
+#############################
+Write-Output "`r`n# Script Completed`r`n" | Out-File -FilePath $outpath -Append
 $stop_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
-$completed = "NCAS run completed at $stop_time_readable"
+$completed = "NCAS run completed at " + $stop_time_readable + "`r`n"
 Write-Output $completed | Out-File -FilePath $outpath -Append
 
 $completed_HTML = "<h2>Script Completed</h2><p>" + $completed + "</p>" 
@@ -216,23 +222,22 @@ $completed_HTML = "<h2>Script Completed</h2><p>" + $completed + "</p>"
 # Cutaway Security Footer
 #############################
 
-$cutsec_footer =  "****************************************************`n"
-$cutsec_footer += "NCAS is brought to you by Cutaway Security, LLC`n"
-$cutsec_footer += "For assistance with your assessments, please contact info [@] cutawaysecurity.com`n"
-$cutsec_footer += "For recommendations or issues, please add an issues or create a pull request on GitHub, or contact dev [@] cutawaysecurity.com`n"
-$cutsec_footer += "****************************************************`n"
+$cutsec_footer =  "`r`n****************************************************`r`n"
+$cutsec_footer += "NCAS is brought to you by Cutaway Security, LLC`r`n"
+$cutsec_footer += "For assistance with your assessments, please contact info [@] cutawaysecurity.com`r`n"
+$cutsec_footer += "For recommendations or issues, please add an issues or create a pull request on GitHub, or contact dev [@] cutawaysecurity.com`r`n"
+$cutsec_footer += "****************************************************`r`n"
 
-$cutsec_footer_HTML = '<p></p>'
+$cutsec_footer_HTML = "<p>Creation Date: " + $stop_time_readable + "</p></body></html>"
 if ($cutsec_footer){
     $cutsec_footer | Out-File -FilePath $outpath -Append
-    $cutsec_footer_HTML = "<p>" + $cutsec_footer.Replace("`n","</br>") + "</p>"
+    $cutsec_footer_HTML = "<p>" + ($cutsec_footer -replace "`r`n","</br>") + "</p><p>Creation Date: " + $stop_time_readable + "</body></html>"
 }
 
 #############################
 # Stop script
 #############################
 if ($runstat) {Write-Host "NCAS run finished at $stop_time_readable on $computername"}
-$report_HTML = ConvertTo-HTML -Head $Header -Body `
- "$report_name_HTML $report_header_HTML $sysinfo_HTML $hotfixes_HTML $software_HTML $net_servers_HTML $tcp_servers_HTML $udp_servers_HTML $completed_HTML $cutsec_footer_HTML" `
- -Title "$report_name" -PostContent "<p>Creation Date: $stop_time_readable</p>"
+$report_HTML = $report_name_HTML + " " + $report_header_HTML + " " + $sysinfo_HTML + " " + `
+    $hotfix_HTML + " " + $software_HTML + " " + $network_HTML + " " + $completed_HTML + " " + $cutsec_footer_HTML
 $report_HTML | Out-File -FilePath $outpath_html 
