@@ -1,4 +1,29 @@
+<#
+	ncas_win10.ps1 - NERC CIP Audit Script for Windows 10. This script 
+                     will collect data from the system and generate a
+                     text and HTML report file, and provide individual
+                     output files.
+    Author: Don C. Weber (@cutaway)
+    Date:   March 15, 2022
+#>
 
+<#
+	License: 
+	Copyright (c) 2022, Cutaway Security, Inc. <dev [@] cutawaysecurity.com>
+	
+	sawh.ps1 is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+	
+	sawh.ps1 is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+	Point Of Contact:    Don C. Weber <dev [@] cutawaysecurity.com>
+#>
 
 #############################
 # Script behavior parameters
