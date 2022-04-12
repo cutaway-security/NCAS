@@ -130,7 +130,7 @@ Function Get-SystemInfo{
         if ($sysinfo -eq ''){$sysinfo = systeminfo}
         $sysdata = $sysinfo | Select-String -Pattern '^OS Version','^OS Name','^System Type','^Domain'  
     }
-    $sysdata | Format-Table -AutoSize | Out-String -Width 4096
+    $sysdata
 }
 
 Function Get-InstalledSoftware{
@@ -292,22 +292,28 @@ Function Get-InterfaceConfig{
 
 Function Get-VulnCheck{
     # Check for NetBIOS configuration. Requires PSv3
-    Write-Host "NetBIOS Configurations:"
-	(Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
-		$if_guid = $_.InterfaceGuid; 
-		$if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
-		$if_name = $_.Name;
-		if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
-		Write-Host "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
-	}
+    if (Test-CommandExists Get-NetAdapter){
+        Write-Host "NetBIOS Configurations:"
+        (Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
+            $if_guid = $_.InterfaceGuid; 
+            $if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
+            $if_name = $_.Name;
+            if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
+            Write-Host "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
+        }
+    }
 
     # Check if SMBv1 is Enabled
-    $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
-	Write-Host "`nSMBv1 is currently: $smb_state"
+    if (Test-CommandExists Get-WindowsOptionalFeature){
+        $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
+        Write-Host "`nSMBv1 is currently: $smb_state"
+    }
 
     # Check SMB Configuration
-    Write-Host "`nSMB Configurations:"
-    Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
+    if (Test-CommandExists Get-SmbServerConfiguration){
+        Write-Host "`nSMB Configurations:"
+        Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
+    }
 }
 
 #############################
@@ -381,7 +387,7 @@ Get-InterfaceConfig
 
 # Common Vulnerability Checks
 #############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     $secName = "Common Vulnerability Checks"
     Prt-SectionHeader $secName
     Get-VulnCheck

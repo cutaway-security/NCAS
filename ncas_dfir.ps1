@@ -131,7 +131,7 @@ Function Get-SystemInfo{
         if ($sysinfo -eq ''){$sysinfo = systeminfo}
         $sysdata = $sysinfo | Select-String -Pattern '^OS Version','^OS Name','^System Type','^Domain'  
     }
-    $sysdata | Format-Table -AutoSize | Out-String -Width 4096
+    $sysdata
 }
 
 Function Get-InstalledSoftware{
@@ -302,8 +302,13 @@ Function Get-TCPServicesInfo{
         # Query Listening TCP Daemons
         $tcplisteners = Get-NetTCPConnection 
     }else{
-        # Query Listening TCP Daemons
-        $tcplisteners = Get-CimInstance -Namespace ROOT\StandardCIMV2 -Class MSFT_NetTCPConnection 
+        # Query Listening TCP 
+        try{
+            $tcplisteners = Get-CimInstance -Namespace ROOT\StandardCIMV2 -Class MSFT_NetTCPConnection -ErrorAction Stop 
+        } Catch {
+            netstat -naob -p TCP
+            return
+        }
     }
 
     $tcpservers = $tcplisteners | 
@@ -331,8 +336,14 @@ Function Get-UDPServicesInfo{
         $udplisteners = Get-NetUDPEndpoint 
     }else{
         # Query Listening UDP Daemons
-        $udplisteners = Get-CimInstance -Namespace ROOT\StandardCIMV2 -Class MSFT_NetUDPEndpoint 
+        try{
+            $udplisteners = Get-CimInstance -Namespace ROOT\StandardCIMV2 -Class MSFT_NetUDPEndpoint -ErrorAction SilentlyContinue -ErrorAction Stop 
+        } Catch {
+            netstat -naob -p UDP
+            return
+        }
     }
+
     # Query Listening UDP Daemons
     $udpservers = $udplisteners | 
         Where-Object { $_.LocalAddress -ne "127.0.0.1" } |
@@ -349,34 +360,44 @@ Function Get-UDPServicesInfo{
 
 Function Get-VulnCheck{
     # Check for NetBIOS configuration. Requires PSv3
-    Write-Host "NetBIOS Configurations:"
-	(Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
-		$if_guid = $_.InterfaceGuid; 
-		$if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
-		$if_name = $_.Name;
-		if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
-		Write-Host "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
-	}
+    if (Test-CommandExists Get-NetAdapter){
+        Write-Host "NetBIOS Configurations:"
+        (Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
+            $if_guid = $_.InterfaceGuid; 
+            $if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
+            $if_name = $_.Name;
+            if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
+            Write-Host "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
+        }
+    }
 
     # Check if SMBv1 is Enabled
-    $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
-	Write-Host "`nSMBv1 is currently: $smb_state"
+    if (Test-CommandExists Get-WindowsOptionalFeature){
+        $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
+        Write-Host "`nSMBv1 is currently: $smb_state"
+    }
 
     # Check SMB Configuration
-    Write-Host "`nSMB Configurations:"
-    Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
+    if (Test-CommandExists Get-SmbServerConfiguration){
+        Write-Host "`nSMB Configurations:"
+        Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
+    }
 }
 
 Function Get-ProcessMemory{
-    Get-Process | foreach-object {
-        Get-Process -IncludeUserName -name $_.ProcessName -PipelineVariable pv |
-        Measure-Object Workingset -sum -average |
-        Select-object Count,
-        @{Name="UserName";Expression = {$pv.UserName}},
-        @{Name="SumMB";Expression = {[math]::round($_.Sum/1MB,2)}},
-        @{Name="AvgMB";Expression = {[math]::round($_.Average/1MB,2)}},
-        @{Name="Path";Expression = {$pv.Path}}
-    } | Format-Table -AutoSize | Out-String -Width 4096
+    try{
+        Get-Process | foreach-object {
+            Get-Process -IncludeUserName -name $_.ProcessName -PipelineVariable pv -ErrorAction Stop -ErrorAction SilentlyContinue |
+            Measure-Object Workingset -sum -average |
+            Select-object Count,
+            @{Name="UserName";Expression = {$pv.UserName}},
+            @{Name="SumMB";Expression = {[math]::round($_.Sum/1MB,2)}},
+            @{Name="AvgMB";Expression = {[math]::round($_.Average/1MB,2)}},
+            @{Name="Path";Expression = {$pv.Path}}
+        } | Format-Table -AutoSize | Out-String -Width 4096
+    } Catch {
+        Get-Process | Format-Table -Property Name,Path,Id,VirtualMemorySize,VirtualMemorySize64 -AutoSize | Out-String -Width 4096
+    }
 }
 
 Function Get-USBDevices{
@@ -386,7 +407,11 @@ Function Get-USBDevices{
 
     # Get History of Connected USB Devices - Mass Storage
     Write-Host "`History Mass Storage USB Devices:"
-    Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+    try {
+        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' -ErrorAction Stop | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+    } Catch {
+        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USB\*\*' | Where-Object {$_.DeviceDesc -like "*mass*"} | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+    }
 
     # Get History of Connected USB Devices - HID
     Write-Host "`History HID USB Devices:"
@@ -395,7 +420,11 @@ Function Get-USBDevices{
 
 Function Get-SchedTasks{
     # Get a list of the currently scheduled tasks
-    get-scheduledtask | Format-Table -Property TaskName,TaskPath,State,Triggers,Date,Author -AutoSize | Out-String -Width 4096
+    if (Test-CommandExists Get-ScheduledTask){
+        Get-ScheduledTask | Format-Table -Property TaskName,TaskPath,State,Triggers,Date,Author -AutoSize | Out-String -Width 4096
+    } else {
+        schtasks.exe
+    }
 }
 
 #############################
@@ -481,7 +510,7 @@ Get-UDPServicesInfo
 
 # Common Vulnerability Checks
 #############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     $secName = "Common Vulnerability Checks"
     Prt-SectionHeader $secName
     Get-VulnCheck
@@ -489,7 +518,7 @@ if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
 
 # Process Memory Usage
 #############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     $secName = "Process Memory Usage"
     Prt-SectionHeader $secName
     Get-ProcessMemory
@@ -497,7 +526,7 @@ if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
 
 # Scheduled Tasks
 #############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     $secName = "Scheduled Tasks"
     Prt-SectionHeader $secName
     Get-SchedTasks
@@ -505,7 +534,7 @@ if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
 
 # USB Device History
 #############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     $secName = "USB Device History"
     Prt-SectionHeader $secName
     Get-USBDevices
