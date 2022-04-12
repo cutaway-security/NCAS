@@ -1,8 +1,9 @@
 <#
-	ncas_collector.ps1 - NERC CIP Audit Script for Windows system
+	ncas_dfir.ps1 - NERC CIP Audit Script for Windows system
         with PowerShell greater than 3. This script will collect 
         data from the system using default Cmdlets or using the
         Get-CmdInstance (requires PSv3) and output to the screen. 
+        This script collects static and volatile information.
     Author: Don C. Weber (@cutaway)
     Date:   April 12, 2022
 #>
@@ -11,12 +12,12 @@
 	License: 
 	Copyright (c) 2022, Cutaway Security, Inc. <dev [@] cutawaysecurity.com>
 	
-	ncas_collector.ps1 is free software: you can redistribute it and/or modify
+	ncas_dfir.ps1 is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
 	the Free Software Foundation, either version 3 of the License, or
 	(at your option) any later version.
 	
-	ncas_collector.ps1 is distributed in the hope that it will be useful,
+	ncas_dfir.ps1 is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU General Public License for more details.
@@ -37,7 +38,7 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 #############################
 # Set up document header information
 #############################
-$script_name         = 'ncas_collector'
+$script_name         = 'ncas_dfir'
 $script_version      = '1.0'
 $start_time          = Get-Date -format yyyyMMddHHmmssff
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
@@ -290,6 +291,62 @@ Function Get-InterfaceConfig{
     $data | Format-Table -Property Interface,IP,MAC -AutoSize | Out-String -Width 4096
 }
 
+Function Get-TCPServicesInfo{
+    # Make a lookup table by process ID
+    $Processes = @{}
+    Get-Process | ForEach-Object {
+        $Processes[$_.Id] = $_
+    }
+
+    if (Test-CommandExists Get-NetTCPConnection){
+        # Query Listening TCP Daemons
+        $tcplisteners = Get-NetTCPConnection 
+    }else{
+        # Query Listening TCP Daemons
+        $tcplisteners = Get-CimInstance -Namespace ROOT\StandardCIMV2 -Class MSFT_NetTCPConnection 
+    }
+
+    $tcpservers = $tcplisteners | 
+        Where-Object { $_.State -eq "Listen" -and $_.LocalAddress -ne "127.0.0.1" } |
+        Select-Object LocalAddress,
+            LocalPort,
+            @{Name="PID";         Expression={ $_.OwningProcess }},
+            @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {($_.ProcessId -eq $inpid)}).Name }}, 
+            @{Name="Path"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).Path }}, 
+            @{Name="CommandLine"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).CommandLine }} |
+        Sort-Object -Property LocalPort, LocalAddress
+
+    $tcpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
+}
+
+Function Get-UDPServicesInfo{
+    # Make a lookup table by process ID
+    $Processes = @{}
+    Get-Process | ForEach-Object {
+        $Processes[$_.Id] = $_
+    }
+
+    if (Test-CommandExists Get-NetUDPEndpoint){
+        # Query Listening UDP Daemons
+        $udplisteners = Get-NetUDPEndpoint 
+    }else{
+        # Query Listening UDP Daemons
+        $udplisteners = Get-CimInstance -Namespace ROOT\StandardCIMV2 -Class MSFT_NetUDPEndpoint 
+    }
+    # Query Listening UDP Daemons
+    $udpservers = $udplisteners | 
+        Where-Object { $_.LocalAddress -ne "127.0.0.1" } |
+        Select-Object LocalAddress,
+            LocalPort,
+            @{Name="PID";         Expression={ $_.OwningProcess }},
+            @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {($_.ProcessId -eq $inpid)}).Name }}, 
+            @{Name="Path"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).Path }}, 
+            @{Name="CommandLine"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).CommandLine }} |
+        Sort-Object -Property LocalPort, LocalAddress 
+
+    $udpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
+}
+
 Function Get-VulnCheck{
     # Check for NetBIOS configuration. Requires PSv3
     Write-Host "NetBIOS Configurations:"
@@ -308,6 +365,37 @@ Function Get-VulnCheck{
     # Check SMB Configuration
     Write-Host "`nSMB Configurations:"
     Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
+}
+
+Function Get-ProcessMemory{
+    Get-Process | foreach-object {
+        Get-Process -IncludeUserName -name $_.ProcessName -PipelineVariable pv |
+        Measure-Object Workingset -sum -average |
+        Select-object Count,
+        @{Name="UserName";Expression = {$pv.UserName}},
+        @{Name="SumMB";Expression = {[math]::round($_.Sum/1MB,2)}},
+        @{Name="AvgMB";Expression = {[math]::round($_.Average/1MB,2)}},
+        @{Name="Path";Expression = {$pv.Path}}
+    } | Format-Table -AutoSize | Out-String -Width 4096
+}
+
+Function Get-USBDevices{
+    # Get Currently Connected USB Devices - HID and Mass Storage
+    Write-Host "`nConnected HID and Mass Storage USB Devices:"
+    Get-CimInstance -ClassName Win32_PnpEntity | Where-Object {($_.DeviceID -like "*hid*") -or ($_.Description -like "*mass*")}| Select-Object -Property DeviceID,Description | Format-Table -AutoSize | Out-String -Width 4096
+
+    # Get History of Connected USB Devices - Mass Storage
+    Write-Host "`History Mass Storage USB Devices:"
+    Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+
+    # Get History of Connected USB Devices - HID
+    Write-Host "`History HID USB Devices:"
+    Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\HID\*\*' | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+}
+
+Function Get-SchedTasks{
+    # Get a list of the currently scheduled tasks
+    get-scheduledtask | Format-Table -Property TaskName,TaskPath,State,Triggers,Date,Author -AutoSize | Out-String -Width 4096
 }
 
 #############################
@@ -379,12 +467,48 @@ $secName = "Network Interfaces"
 Prt-SectionHeader $secName
 Get-InterfaceConfig
 
+# Network TCP Connections
+#############################
+$secName = "Network TCP Connections"
+Prt-SectionHeader $secName
+Get-TCPServicesInfo
+
+# Network UDP Connections
+#############################
+$secName = "Network UDP Connections"
+Prt-SectionHeader $secName
+Get-UDPServicesInfo
+
 # Common Vulnerability Checks
 #############################
 if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
     $secName = "Common Vulnerability Checks"
     Prt-SectionHeader $secName
     Get-VulnCheck
+}
+
+# Process Memory Usage
+#############################
+if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+    $secName = "Process Memory Usage"
+    Prt-SectionHeader $secName
+    Get-ProcessMemory
+}
+
+# Scheduled Tasks
+#############################
+if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+    $secName = "Scheduled Tasks"
+    Prt-SectionHeader $secName
+    Get-SchedTasks
+}
+
+# USB Device History
+#############################
+if (($global:admin_user) -and ([int]$global:ps_version -gt 3)){
+    $secName = "USB Device History"
+    Prt-SectionHeader $secName
+    Get-USBDevices
 }
 
 # Report Footer
