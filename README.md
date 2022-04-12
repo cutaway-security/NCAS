@@ -16,50 +16,20 @@ Develop a baseline configuration, individually or by group, which shall include 
 
 ## Name and Descriptions
 
-* ncas_win10.ps1 - PS script to run on Windows 10 systems.
-* ncas_win7.ps1 - PS script to run on Windows 7 systems.
+* ncas_collector.ps1 - PS script to run on Windows 7/10/11 and Windows Servers systems. Requires PowerShell version 3 or greater
 
 ## Usage and Examples
 
-### ncas_win10.ps1
+### ncas_collector.ps1
 
 ```powershell
-PS C:\Users\administrator> $env:APPDATA
-C:\Users\administrator\AppData\Roaming
 PS C:\Users\administrator> Set-ExecutionPolicy -Scope Process Bypass
 
 Execution Policy Change
 The execution policy helps protect you from scripts that you do not trust. Changing the execution policy might expose you to the security risks described in the
 about_Execution_Policies help topic. Do you want to change the execution policy?
 [Y] Yes  [N] No  [S] Suspend  [?] Help (default is "Y"): Y
-PS C:\Users\administrator> .\ncas_win10.ps1
-NCAS run started at Tuesday 03/15/2022 06:44 on SERV-HMI-01
-Output folder created at: C:\Users\administrator\AppData\Roaming\ACME_2022031506441913                                           
-Gathering computer version information                                                                                  
-Gathering security patch information
-Gathering installed software information
-Gathering TCP and UDP Listening Services
-NCAS run finished at Tuesday 03/15/2022 06:44 on SERV-HMI-01
-```
-
-### ncas_win7.ps1
-```powershell
-PS C:\Users\administrator\Documents> $env:APPDATA
-C:\Users\administrator\AppData\Roaming
-PS C:\Users\administrator\Documents> Set-ExecutionPolicy -Scope Process Bypass
-
-Execution Policy Change
-The execution policy helps protect you from scripts that you do not trust. Changing the execution policy might expose you to the security risks described in the
-about_Execution_Policies help topic. Do you want to change the execution policy?
-[Y] Yes  [N] No  [S] Suspend  [?] Help (default is "Y"): Y
-PS C:\Users\administrator\Documents> .\ncas_win7.ps1
-NCAS run started at Tuesday 03/15/2022 14:38 on WIN-7-HMI
-Output folder created at: C:\Users\administrator\AppData\Roaming\ACME_2022031514381444
-Gathering computer version information
-Gathering security patch information
-Gathering installed software information
-Gathering TCP and UDP Listening Services
-NCAS run finished at Tuesday 03/15/2022 14:38 on WIN-7-HMI
+PS C:\Users\administrator> .\ncas_collector.ps1
 ```
 
 # Contact
