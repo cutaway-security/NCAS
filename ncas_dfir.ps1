@@ -56,44 +56,44 @@ function Prt-SectionHeader{
 		$SectionName = 'Section Name'
 	)
 
-    Write-Host "`n#############################"
-    Write-Host "# $SectionName"
-    Write-Host "#############################"
+    Write-Output "`n#############################"
+    Write-Output "# $SectionName"
+    Write-Output "#############################"
 }
 
 function Prt-ReportHeader{
 
-    Write-Host "`n#############################"
-    Write-Host "# NERC CIP Audit Script: $script_name $script_version"
-    if ($auditor_company){Write-Host "# Auditing Company: $auditor_company"}
-    if ($sitename){Write-Host "# Site / Plant: $sitename"}
-    Write-Host "#############################"
-    Write-Host "# Hostname: $computername"
-    Write-Host "# Start Time: $start_time_readable"
-    Write-Host "# PS Version: $ps_version"
+    Write-Output "`n#############################"
+    Write-Output "# NERC CIP Audit Script: $script_name $script_version"
+    if ($auditor_company){Write-Output "# Auditing Company: $auditor_company"}
+    if ($sitename){Write-Output "# Site / Plant: $sitename"}
+    Write-Output "#############################"
+    Write-Output "# Hostname: $computername"
+    Write-Output "# Start Time: $start_time_readable"
+    Write-Output "# PS Version: $ps_version"
     Get-AdminState
-    Write-Host "#############################"
+    Write-Output "#############################"
 }
 
 function Prt-ReportFooter{
 
     $stop_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
 
-    Write-Host "`n#############################"
-    Write-Host "# $script_name completed"
-    Write-Host "# Stop Time: $stop_time_readable"
-    Write-Host "#############################`n"
+    Write-Output "`n#############################"
+    Write-Output "# $script_name completed"
+    Write-Output "# Stop Time: $stop_time_readable"
+    Write-Output "#############################`n"
 
 }
 
 function Prt-CutSec-ReportFooter{
 
-    Write-Host "`n#############################"
-    Write-Host "# NERC CIP Audit Script: $script_name $script_version"
-    Write-Host "# Brought to you by Cutaway Security, LLC"
-    Write-Host "# For assessment and auditing help, contact info [@] cutawaysecurity.com"
-    Write-Host "# For script help, contact dev [@] cutawaysecurity.com"
-    Write-Host "#############################`n"
+    Write-Output "`n#############################"
+    Write-Output "# NERC CIP Audit Script: $script_name $script_version"
+    Write-Output "# Brought to you by Cutaway Security, LLC"
+    Write-Output "# For assessment and auditing help, contact info [@] cutawaysecurity.com"
+    Write-Output "# For script help, contact dev [@] cutawaysecurity.com"
+    Write-Output "#############################`n"
 
 }
 
@@ -113,10 +113,10 @@ Function Test-CommandExists{
 ####################
 Function Get-AdminState {
 	if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")){ 
-		Write-Host "# Script Running As Normal User" 
+		Write-Output "# Script Running As Normal User" 
         $global:admin_user = $false
 	} else {
-		Write-Host "# Script Running As Administrator" 
+		Write-Output "# Script Running As Administrator" 
         $global:admin_user = $true
     }
 }
@@ -361,25 +361,25 @@ Function Get-UDPServicesInfo{
 Function Get-VulnCheck{
     # Check for NetBIOS configuration. Requires PSv3
     if (Test-CommandExists Get-NetAdapter){
-        Write-Host "NetBIOS Configurations:"
+        Write-Output "NetBIOS Configurations:"
         (Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
             $if_guid = $_.InterfaceGuid; 
             $if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
             $if_name = $_.Name;
             if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
-            Write-Host "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
+            Write-Output "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
         }
     }
 
     # Check if SMBv1 is Enabled
     if (Test-CommandExists Get-WindowsOptionalFeature){
         $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
-        Write-Host "`nSMBv1 is currently: $smb_state"
+        Write-Output "`nSMBv1 is currently: $smb_state"
     }
 
     # Check SMB Configuration
     if (Test-CommandExists Get-SmbServerConfiguration){
-        Write-Host "`nSMB Configurations:"
+        Write-Output "`nSMB Configurations:"
         Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
     }
 }
@@ -402,11 +402,11 @@ Function Get-ProcessMemory{
 
 Function Get-USBDevices{
     # Get Currently Connected USB Devices - HID and Mass Storage
-    Write-Host "`nConnected HID and Mass Storage USB Devices:"
+    Write-Output "`nConnected HID and Mass Storage USB Devices:"
     Get-CimInstance -ClassName Win32_PnpEntity | Where-Object {($_.DeviceID -like "*hid*") -or ($_.Description -like "*mass*")}| Select-Object -Property DeviceID,Description | Format-Table -AutoSize | Out-String -Width 4096
 
     # Get History of Connected USB Devices - Mass Storage
-    Write-Host "`History Mass Storage USB Devices:"
+    Write-Output "`History Mass Storage USB Devices:"
     try {
         Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' -ErrorAction Stop | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
     } Catch {
@@ -414,7 +414,7 @@ Function Get-USBDevices{
     }
 
     # Get History of Connected USB Devices - HID
-    Write-Host "`History HID USB Devices:"
+    Write-Output "`History HID USB Devices:"
     Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\HID\*\*' | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
 }
 
