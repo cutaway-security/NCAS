@@ -26,7 +26,7 @@ Organizations using these scripts for NERC CIP compliance must review the output
 
 ## Name and Descriptions
 
-* ncas_collector.ps1 - PS script to run on Windows 7/10/11 and Windows Servers systems. Requires PowerShell version 3 or greater
+* ncas_collector.ps1 - PS script to run on Windows 7/10/11 and Windows Servers systems.
   * Tested on Windows Workstation 7/10/11 and Windows Server 2012/2016/2019 
 * ncas_dfir.ps1 - All features and requirements of ncas_collector script with additional volatile data collection.
   * Tested on Windows Workstation 7/10/11 and Windows Server 2012/2016/2019
