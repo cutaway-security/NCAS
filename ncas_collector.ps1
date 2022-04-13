@@ -237,31 +237,39 @@ Function Get-WinEventLogs{
 }
 
 Function Get-SysAVInfo{
-    $avstate = @{
-        "262144" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
-        "262160" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
-        "266240" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
-        "266256" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
-        "393216" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
-        "393232" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
-        "393488" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
-        "397312" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
-        "397328" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
-        "397584" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
-        "397568" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
-        "393472" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
+    if (Test-CommandExists Get-MPComputerStatus){
+        Write-Output "# Windows Defender Status"
+        Get-MPComputerStatus
     }
 
-    $avprodprops = @{'Product Name'='';'Definition Status'='';'Real-Time Protection'='';'Path'=''}
-    $avprod_Template = New-Object -TypeName PSObject -Property $avprodprops
-    Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct | ForEach-Object {
-        $avprod = $avprod_Template.PSObject.Copy()
-        $avprod.'Product Name' = $_.displayName
-        $avprod.'Definition Status' = $avstate[[string]$_.productState].defstatus
-        $avprod.'Real-Time Protection' = $avstate[[string]$_.productState].rtstatus
-        $avprod.'Path' = $_.pathToSignedProductExe
-    }
-    $avprod | Format-Table -Property 'Product Name','Definition Status','Real-Time Protection','Path' -AutoSize | Out-String -Width 4096
+    try{
+        $avstate = @{
+            "262144" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
+            "262160" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
+            "266240" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
+            "266256" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
+            "393216" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
+            "393232" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
+            "393488" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
+            "397312" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
+            "397328" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
+            "397584" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
+            "397568" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
+            "393472" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
+        }
+
+        $avprodprops = @{'Product Name'='';'Definition Status'='';'Real-Time Protection'='';'Path'=''}
+        $avprod_Template = New-Object -TypeName PSObject -Property $avprodprops
+        Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct -ErrorAction Stop | ForEach-Object {
+            $avprod = $avprod_Template.PSObject.Copy()
+            $avprod.'Product Name' = $_.displayName
+            $avprod.'Definition Status' = $avstate[[string]$_.productState].defstatus
+            $avprod.'Real-Time Protection' = $avstate[[string]$_.productState].rtstatus
+            $avprod.'Path' = $_.pathToSignedProductExe
+        }
+        Write-Output "# Other Anti-Virus Status"
+        $avprod | Format-Table -Property 'Product Name','Definition Status','Real-Time Protection','Path' -AutoSize | Out-String -Width 4096
+    }Catch{ Write-Output "Other Anti-Virus Status Check Failed" }
 }
 
 Function Get-InterfaceConfig{
