@@ -1,5 +1,5 @@
 <#
-	ncas_collector.ps1 - NERC CIP Audit Script for Windows system
+	ncas_collector.ps1 - NERC CIP Assessment Script for Windows system
         with PowerShell greater than 3. This script will collect 
         data from the system using default Cmdlets or using the
         Get-CmdInstance (requires PSv3) and output to the screen. 
