@@ -1,5 +1,5 @@
 <#
-	ncas_dfir.ps1 - NERC CIP Audit Script for Windows system
+	ncas_dfir.ps1 - NERC CIP Assessment Script for Windows system
         with PowerShell greater than 3. This script will collect 
         data from the system using default Cmdlets or using the
         Get-CmdInstance (requires PSv3) and output to the screen. 
@@ -411,19 +411,19 @@ Function Get-ProcessMemory{
 Function Get-USBDevices{
     # Get Currently Connected USB Devices - HID and Mass Storage
     Write-Output "`nConnected HID and Mass Storage USB Devices:"
-    Get-CimInstance -ClassName Win32_PnpEntity | Where-Object {($_.DeviceID -like "*hid*") -or ($_.Description -like "*mass*")}| Select-Object -Property DeviceID,Description | Format-Table -AutoSize | Out-String -Width 4096
+    Get-CimInstance -ClassName Win32_PnpEntity -ErrorAction SilentlyContinue | Where-Object {($_.DeviceID -like "*hid*") -or ($_.Description -like "*mass*")}| Select-Object -Property DeviceID,Description | Format-Table -AutoSize | Out-String -Width 4096
 
     # Get History of Connected USB Devices - Mass Storage
     Write-Output "`History Mass Storage USB Devices:"
     try {
         Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' -ErrorAction Stop | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
     } Catch {
-        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USB\*\*' | Where-Object {$_.DeviceDesc -like "*mass*"} | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USB\*\*' -ErrorAction SilentlyContinue | Where-Object {$_.DeviceDesc -like "*mass*"} | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
     }
 
     # Get History of Connected USB Devices - HID
     Write-Output "`History HID USB Devices:"
-    Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\HID\*\*' | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+    Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\HID\*\*' -ErrorAction SilentlyContinue | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
 }
 
 Function Get-SchedTasks{
