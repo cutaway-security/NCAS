@@ -17,7 +17,9 @@ Develop a baseline configuration, individually or by group, which shall include 
 ## Name and Descriptions
 
 * ncas_collector.ps1 - PS script to run on Windows 7/10/11 and Windows Servers systems. Requires PowerShell version 3 or greater
+  * Tested on Windows Workstation 7/10/11 and Windows Server 2012/2016/2019 
 * ncas_dfir.ps1 - All features and requirements of ncas_collector script with additional volatile data collection.
+  * Tested on Windows Workstation 7/10/11 and Windows Server 2012/2016/2019
 
 # Contact
 To request assistance or schedule an assessment, please contact Cutaway Security at 'info [@] cutawaysecurity.com'.
