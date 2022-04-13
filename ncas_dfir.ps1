@@ -496,6 +496,7 @@ Function Get-AuthEvents {
                 'StopAction'            = $null
                 'Session Active (Days)' = $null
                 'Session Active (Min)'  = $null
+                'LogonType'             = $null
             }
 
             ## Need current users because if no stop time, they're still probably logged in
@@ -520,6 +521,7 @@ Function Get-AuthEvents {
                         if (-not $logonId) {
                             $logonId = ($xEvt.Event.EventData.Data | where { $_.Name -eq 'LogonId' }).'#text'
                         }
+                        $output.LogonType = ($xEvt.Event.EventData.Data | where { $_.Name -eq 'LogonType'}).'#text'
                         $output.StartTime = $_.TimeCreated
 
                         Write-Verbose -Message "New session start event found: event ID [$($logonEvtId)] username [$($output.Username)] logonID [$($logonId)] time [$($output.StartTime)]"
