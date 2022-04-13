@@ -20,6 +20,10 @@ Organizations using these scripts for NERC CIP compliance must review the output
 
 # Scripts
 
+## Requirements
+
+* PowerShell version 3 or greater. This is because PSv3 provides the Get-CIMInstance cmdlet. The scripts will run in PSv2 and PSv3 without the necessary CIM namespaces. However, the checks may produce errors and no data for some checks. 
+
 ## Name and Descriptions
 
 * ncas_collector.ps1 - PS script to run on Windows 7/10/11 and Windows Servers systems. Requires PowerShell version 3 or greater
