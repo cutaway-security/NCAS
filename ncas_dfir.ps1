@@ -39,7 +39,7 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 # Set up document header information
 #############################
 $script_name         = 'ncas_dfir'
-$script_version      = '1.0'
+$script_version      = '1.0.1'
 $start_time          = Get-Date -format yyyyMMddHHmmssff
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
 $computername        = $env:ComputerName
@@ -122,7 +122,7 @@ Function Get-AdminState {
 }
 
 #############################
-# Test Cmdlet Exists, to help default to Get-CimInstance
+# Information Collection Functions
 #############################
 Function Get-SystemInfo{
     if (Test-CommandExists Get-ComputerInfo){
@@ -299,6 +299,46 @@ Function Get-InterfaceConfig{
     $data | Format-Table -Property Interface,IP,MAC -AutoSize | Out-String -Width 4096
 }
 
+Function Get-SharedFolders {
+    if (Test-CommandExists Get-SmbShare){
+        Get-SmbShare | Format-Table -Property Name,Description,Path,ShareType,ShareState,CurrentUsers,EncryptData -AutoSize | Out-String -Width 4096
+        if (Test-CommandExists Get-FileShare){
+            Get-FileShare | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
+        }
+    }else{
+        Get-CimInstance -ClassName Win32_Share | Format-Table -Property Name,Description,Path,Status -AutoSize | Out-String -Width 4096
+    }
+}
+
+Function Get-VulnCheck{
+    # Check for NetBIOS configuration. Requires PSv3
+    if (Test-CommandExists Get-NetAdapter){
+        Write-Output "NetBIOS Configurations:"
+        (Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
+            $if_guid = $_.InterfaceGuid; 
+            $if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
+            $if_name = $_.Name;
+            if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
+            Write-Output "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
+        }
+    }
+
+    # Check if SMBv1 is Enabled
+    if (Test-CommandExists Get-WindowsOptionalFeature){
+        $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
+        Write-Output "`nSMBv1 is currently: $smb_state"
+    }
+
+    # Check SMB Configuration
+    if (Test-CommandExists Get-SmbServerConfiguration){
+        Write-Output "`nSMB Configurations:"
+        Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
+    }
+}
+
+#############################
+# Volatile Information Collection Functions
+#############################
 Function Get-TCPServicesInfo{
     # Make a lookup table by process ID
     $Processes = @{}
@@ -364,32 +404,6 @@ Function Get-UDPServicesInfo{
         Sort-Object -Property LocalPort, LocalAddress 
 
     $udpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
-}
-
-Function Get-VulnCheck{
-    # Check for NetBIOS configuration. Requires PSv3
-    if (Test-CommandExists Get-NetAdapter){
-        Write-Output "NetBIOS Configurations:"
-        (Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
-            $if_guid = $_.InterfaceGuid; 
-            $if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
-            $if_name = $_.Name;
-            if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
-            Write-Output "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
-        }
-    }
-
-    # Check if SMBv1 is Enabled
-    if (Test-CommandExists Get-WindowsOptionalFeature){
-        $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
-        Write-Output "`nSMBv1 is currently: $smb_state"
-    }
-
-    # Check SMB Configuration
-    if (Test-CommandExists Get-SmbServerConfiguration){
-        Write-Output "`nSMB Configurations:"
-        Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
-    }
 }
 
 Function Get-ProcessMemory{
@@ -567,6 +581,10 @@ Function Get-AuthEvents {
 Prt-ReportHeader
 $sysinfo = ''
 
+#############################
+# Information Collection
+#############################
+
 # Computer Information
 #############################
 $secName = "Computer Information"
@@ -627,6 +645,24 @@ $secName = "Network Interfaces"
 Prt-SectionHeader $secName
 Get-InterfaceConfig
 
+# Common Vulnerability Checks
+#############################
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
+    $secName = "Common Vulnerability Checks"
+    Prt-SectionHeader $secName
+    Get-VulnCheck
+}
+
+# File Shares
+#############################
+$secName = "File Shares"
+Prt-SectionHeader $secName
+Get-SharedFolders
+
+#############################
+# Volatile Information Collection 
+#############################
+
 # Network TCP Connections
 #############################
 $secName = "Network TCP Connections"
@@ -638,14 +674,6 @@ Get-TCPServicesInfo
 $secName = "Network UDP Connections"
 Prt-SectionHeader $secName
 Get-UDPServicesInfo
-
-# Common Vulnerability Checks
-#############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
-    $secName = "Common Vulnerability Checks"
-    Prt-SectionHeader $secName
-    Get-VulnCheck
-}
 
 # Process Memory Usage
 #############################

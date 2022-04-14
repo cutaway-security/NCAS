@@ -26,10 +26,31 @@ Organizations using these scripts for NERC CIP compliance must review the output
 
 ## Name and Descriptions
 
-* ncas_collector.ps1 - PS script to run on Windows 7/10/11 and Windows Servers systems.
-  * Tested on Windows Workstation 7/10/11 and Windows Server 2012/2016/2019 
-* ncas_dfir.ps1 - All features and requirements of ncas_collector script with additional volatile data collection.
-  * Tested on Windows Workstation 7/10/11 and Windows Server 2012/2016/2019
+* ncas_collector.ps1 - Collects the following information:
+  * Computer Information
+  * Installed Applications
+  * Installed Patches
+  * Installed Services
+  * Local User Accounts
+  * Local Group Accounts
+  * Local Group Memberships
+  * Event Log Settings
+  * Anti-Virus Status 
+  * Network Interfaces
+  * Common Vulnerability Checks
+  * File Shares 
+* ncas_dfir.ps1 - Collects all collector script data plus the following volatile data:
+  * Network TCP Connections
+  * Network UDP Connections
+  * Process Memory Usage
+  * Scheduled Tasks
+  * USB Device History
+  * Authentication Events
+
+## Windows Systems Tested 
+
+* Workstation 7/10/11
+* Server 2012/2016/2019
 
 # Contact
 To request assistance or schedule an assessment, please contact Cutaway Security at 'info [@] cutawaysecurity.com'.

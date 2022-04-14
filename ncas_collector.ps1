@@ -38,7 +38,7 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 # Set up document header information
 #############################
 $script_name         = 'ncas_collector'
-$script_version      = '1.0'
+$script_version      = '1.0.1'
 $start_time          = Get-Date -format yyyyMMddHHmmssff
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
 $computername        = $env:ComputerName
@@ -324,6 +324,17 @@ Function Get-VulnCheck{
     }
 }
 
+Function Get-SharedFolders {
+    if (Test-CommandExists Get-SmbShare){
+        Get-SmbShare | Format-Table -Property Name,Description,Path,ShareType,ShareState,CurrentUsers,EncryptData -AutoSize | Out-String -Width 4096
+        if (Test-CommandExists Get-FileShare){
+            Get-FileShare | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
+        }
+    }else{
+        Get-CimInstance -ClassName Win32_Share | Format-Table -Property Name,Description,Path,Status -AutoSize | Out-String -Width 4096
+    }
+}
+
 #############################
 # Main
 #############################
@@ -332,6 +343,10 @@ Function Get-VulnCheck{
 #############################
 Prt-ReportHeader
 $sysinfo = ''
+
+#############################
+# Information Collection
+#############################
 
 # Computer Information
 #############################
@@ -400,6 +415,12 @@ if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     Prt-SectionHeader $secName
     Get-VulnCheck
 }
+
+# File Shares
+#############################
+$secName = "File Shares"
+Prt-SectionHeader $secName
+Get-SharedFolders
 
 # Report Footer
 #############################
