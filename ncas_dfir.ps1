@@ -39,7 +39,7 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 # Set up document header information
 #############################
 $script_name         = 'ncas_dfir'
-$script_version      = '1.0.1'
+$script_version      = '1.0.2'
 $start_time          = Get-Date -format yyyyMMddHHmmssff
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
 $computername        = $env:ComputerName
@@ -135,6 +135,7 @@ Function Get-SystemInfo{
 }
 
 Function Get-InstalledSoftware{
+    Write-Host "Retrieving Installed Software using UninstallKey from Registry"
     $array = @()
 
     #Define the variable to hold the location of Currently Installed Programs
@@ -162,9 +163,19 @@ Function Get-InstalledSoftware{
     } 
 
     $software_versions = $array | Where-Object { $_.DisplayName } `
-    | select DisplayName, DisplayVersion, Publisher, InstallLocation
+    | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation
 
     $software_versions | Format-Table -AutoSize | Out-String -Width 4096
+
+    if (Test-CommandExists Get-ChildItem){
+        $software_dirs = ('C:\Program Files (x86)\','C:\Program Files\','C:\')
+        ForEach ($dir in $software_dirs){
+            if (Test-Path -Path $dir){
+                Write-Output "List of Program Directories in $dir"
+                Get-ChildItem $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
+            }
+        }
+    }
 }
 
 Function Get-InstalledHotFixes{
@@ -299,11 +310,20 @@ Function Get-InterfaceConfig{
     $data | Format-Table -Property Interface,IP,MAC -AutoSize | Out-String -Width 4096
 }
 
+Function Get-RouteConfig{
+
+    if (Test-CommandExists Get-NetRoute){
+        Get-NetRoute | Format-Table -Property InterfaceIndex,InterfaceAlias,DestinationPrefix,NextHop,State,AddressFamily
+    } else {
+        Get-CimInstance -ClassName win32_IP4RouteTable | Format-Table -Property InterfaceIndex,Destination,Mask,NextHop,Age
+    }
+}
+
 Function Get-SharedFolders {
     if (Test-CommandExists Get-SmbShare){
         Get-SmbShare | Format-Table -Property Name,Description,Path,ShareType,ShareState,CurrentUsers,EncryptData -AutoSize | Out-String -Width 4096
         if (Test-CommandExists Get-FileShare){
-            Get-FileShare | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
+            Get-FileShare -ErrorAction SilentlyContinue | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
         }
     }else{
         Get-CimInstance -ClassName Win32_Share | Format-Table -Property Name,Description,Path,Status -AutoSize | Out-String -Width 4096
@@ -340,10 +360,13 @@ Function Get-VulnCheck{
 # Volatile Information Collection Functions
 #############################
 Function Get-TCPServicesInfo{
-    # Make a lookup table by process ID
+    # Make a lookup table by process ID 
     $Processes = @{}
-    Get-Process | ForEach-Object {
-        $Processes[$_.Id] = $_
+    if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
+        Get-Process -IncludeUserName | ForEach-Object { $Processes[$_.Id] = $_ }
+    } else {
+        Get-Process | ForEach-Object { $Processes[$_.Id] = $_ }
+
     }
 
     if (Test-CommandExists Get-NetTCPConnection){
@@ -359,24 +382,41 @@ Function Get-TCPServicesInfo{
         }
     }
 
-    $tcpservers = $tcplisteners | 
-        Where-Object { $_.State -eq "Listen" -and $_.LocalAddress -ne "127.0.0.1" } |
-        Select-Object LocalAddress,
-            LocalPort,
-            @{Name="PID";         Expression={ $_.OwningProcess }},
-            @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {($_.ProcessId -eq $inpid)}).Name }}, 
-            @{Name="Path"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).Path }}, 
-            @{Name="CommandLine"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).CommandLine }} |
-        Sort-Object -Property LocalPort, LocalAddress
+    if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
+        $tcpservers = $tcplisteners | 
+            Where-Object { $_.State -eq "Listen" -and $_.LocalAddress -ne "127.0.0.1" } |
+            Select-Object LocalAddress,
+                LocalPort,
+                @{Name="PID";         Expression={ $_.OwningProcess }},
+                @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); $Processes[$inpid].Name }}, 
+                @{Name="UserName"; Expression={ $inpid = [int]($_.OwningProcess); $Processes[$inpid].UserName }},
+                @{Name="Path"; Expression={ $inpid = [int]($_.OwningProcess); $Processes[$inpid].Path }}, 
+                @{Name="CommandLine"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where-Object {$_.ProcessId -eq $inpid}).CommandLine }} |
+            Sort-Object -Property LocalPort, LocalAddress
 
-    $tcpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
+        $tcpservers | Format-Table -Property ProcessName,PID,UserName,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
+
+    } else {
+        $tcpservers = $tcplisteners | 
+            Where-Object { $_.State -eq "Listen" -and $_.LocalAddress -ne "127.0.0.1" } |
+            Select-Object LocalAddress,
+                LocalPort,
+                @{Name="PID";         Expression={ $_.OwningProcess }},
+                @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where-Object {($_.ProcessId -eq $inpid)}).Name }} |
+            Sort-Object -Property LocalPort, LocalAddress
+
+        $tcpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort -AutoSize | Out-String -Width 4096
+    }
 }
 
 Function Get-UDPServicesInfo{
     # Make a lookup table by process ID
     $Processes = @{}
-    Get-Process | ForEach-Object {
-        $Processes[$_.Id] = $_
+    if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
+        Get-Process -IncludeUserName | ForEach-Object { $Processes[$_.Id] = $_ }
+    } else {
+        Get-Process | ForEach-Object { $Processes[$_.Id] = $_ }
+
     }
 
     if (Test-CommandExists Get-NetUDPEndpoint){
@@ -393,32 +433,60 @@ Function Get-UDPServicesInfo{
     }
 
     # Query Listening UDP Daemons
-    $udpservers = $udplisteners | 
-        Where-Object { $_.LocalAddress -ne "127.0.0.1" } |
-        Select-Object LocalAddress,
-            LocalPort,
-            @{Name="PID";         Expression={ $_.OwningProcess }},
-            @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {($_.ProcessId -eq $inpid)}).Name }}, 
-            @{Name="Path"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).Path }}, 
-            @{Name="CommandLine"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where {$_.ProcessId -eq $inpid}).CommandLine }} |
-        Sort-Object -Property LocalPort, LocalAddress 
+    if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
+        $udpservers = $udplisteners | 
+            Where-Object { $_.LocalAddress -ne "127.0.0.1" } |
+            Select-Object LocalAddress,
+                LocalPort,
+                @{Name="PID";         Expression={ $_.OwningProcess }},
+                @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); $Processes[$inpid].Name }}, 
+                @{Name="UserName"; Expression={ $inpid = [int]($_.OwningProcess); $Processes[$inpid].UserName }},
+                @{Name="Path"; Expression={ $inpid = [int]($_.OwningProcess); $Processes[$inpid].Path }},  
+                @{Name="CommandLine"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where-Object {$_.ProcessId -eq $inpid}).CommandLine }} |
+            Sort-Object -Property LocalPort, LocalAddress 
 
-    $udpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
+        $udpservers | Format-Table -Property ProcessName,PID,UserName,LocalAddress,LocalPort,Path,CommandLine -AutoSize | Out-String -Width 4096
+        
+    } else {
+        $udpservers = $udplisteners | 
+            Where-Object { $_.LocalAddress -ne "127.0.0.1" } |
+            Select-Object LocalAddress,
+                LocalPort,
+                @{Name="PID";         Expression={ $_.OwningProcess }},
+                @{Name="ProcessName"; Expression={ $inpid = [int]($_.OwningProcess); (Get-CimInstance -ClassName Win32_Process | Where-Object {($_.ProcessId -eq $inpid)}).Name }} |
+            Sort-Object -Property LocalPort, LocalAddress 
+
+        $udpservers | Format-Table -Property ProcessName,PID,LocalAddress,LocalPort -AutoSize | Out-String -Width 4096
+
+    }
 }
 
 Function Get-ProcessMemory{
     try{
         Get-Process | foreach-object {
-            Get-Process -IncludeUserName -name $_.ProcessName -PipelineVariable pv -ErrorAction Stop -ErrorAction SilentlyContinue |
+            Get-Process -IncludeUserName -name $_.ProcessName -PipelineVariable pv -ErrorAction Stop |
             Measure-Object Workingset -sum -average |
-            Select-object Count,
+            Select-object Count,Name,Id,
             @{Name="UserName";Expression = {$pv.UserName}},
+            @{Name="Path";Expression = {$pv.Path}},
+            @{Name="CmdLine";Expression = {(Get-CimInstance -ClassName Win32_Process | Where-Object {$_.ProcessId -eq $pv.Id}).CommandLine }},
             @{Name="SumMB";Expression = {[math]::round($_.Sum/1MB,2)}},
             @{Name="AvgMB";Expression = {[math]::round($_.Average/1MB,2)}},
-            @{Name="Path";Expression = {$pv.Path}}
+            @{Name="VirtualMemorySize";Expression = {$pv.VirtualMemorySize}},
+            @{Name="VirtualMemorySize64";Expression = {$pv.VirtualMemorySize64}}
         } | Format-Table -AutoSize | Out-String -Width 4096
-    } Catch {
-        Get-Process | Format-Table -Property Name,Path,Id,VirtualMemorySize,VirtualMemorySize64 -AutoSize | Out-String -Width 4096
+    } Catch {        
+        Get-Process | foreach-object {
+            Get-Process -name $_.ProcessName -PipelineVariable pv -ErrorAction Stop |
+            Measure-Object Workingset -sum -average |
+            Select-object Count,Name,Id,
+            @{Name="Path";Expression = {$pv.Path}},
+            @{Name="CmdLine";Expression = {(Get-CimInstance -ClassName Win32_Process | Where-Object {$_.ProcessId -eq $pv.Id}).CommandLine }},
+            @{Name="SumMB";Expression = {[math]::round($pv.Sum/1MB,2)}},
+            @{Name="AvgMB";Expression = {[math]::round($_.Average/1MB,2)}},
+            @{Name="VirtualMemorySize";Expression = {$pv.VirtualMemorySize}},
+            @{Name="VirtualMemorySize64";Expression = {$pv.VirtualMemorySize64}}
+        } | Format-Table -AutoSize | Out-String -Width 4096
     }
 }
 
@@ -572,6 +640,18 @@ Function Get-AuthEvents {
     END {$evts | Format-Table -AutoSize | Out-String -Width 4096}
 }
 
+Function Get-PreFetch{
+    $prefetch_dir = ('C:\Windows\Prefetch')
+    if (Test-CommandExists Get-ChildItem){
+        ForEach ($dir in $prefetch_dir){
+            if (Test-Path -Path $dir){
+                Write-Output "List of Prefetch Items in $dir"
+                Get-ChildItem $dir | Format-Table -Property Name,LastWriteTime,LastAccessTime,Mode
+            }
+        }
+    }   
+}
+
 #############################
 # Main
 #############################
@@ -645,6 +725,12 @@ $secName = "Network Interfaces"
 Prt-SectionHeader $secName
 Get-InterfaceConfig
 
+# Network Routes
+#############################
+$secName = "Network Routes"
+Prt-SectionHeader $secName
+Get-RouteConfig
+
 # Common Vulnerability Checks
 #############################
 if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
@@ -705,6 +791,14 @@ if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
     $secName = "Authentication Events"
     Prt-SectionHeader $secName
     Get-AuthEvents
+}
+
+# Prefetch Items
+#############################
+if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
+    $secName = "Prefetch Items"
+    Prt-SectionHeader $secName
+    Get-PreFetch
 }
 
 # Report Footer
