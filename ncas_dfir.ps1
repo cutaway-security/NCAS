@@ -135,7 +135,7 @@ Function Get-SystemInfo{
 }
 
 Function Get-InstalledSoftware{
-    Write-Host "Retrieving Installed Software using UninstallKey from Registry"
+    Write-Output "Retrieving Installed Software using UninstallKey from Registry"
     $array = @()
 
     #Define the variable to hold the location of Currently Installed Programs
@@ -635,7 +635,7 @@ Function Get-AuthEvents {
                         Write-Warning -Message $_.Exception.Message
                     }
             })
-        }Catch{ Write-Host "Could not retrieve Auth Eventlogs. Grab the full logs manually."}
+        }Catch{ Write-Output "Could not retrieve Auth Eventlogs. Grab the full logs manually."}
     }
     END {$evts | Format-Table -AutoSize | Out-String -Width 4096}
 }
