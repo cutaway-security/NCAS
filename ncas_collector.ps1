@@ -38,7 +38,7 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 # Set up document header information
 #############################
 $script_name         = 'ncas_collector'
-$script_version      = '1.0.1'
+$script_version      = '1.0.2'
 $start_time          = Get-Date -format yyyyMMddHHmmssff
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
 $computername        = $env:ComputerName
@@ -164,6 +164,16 @@ Function Get-InstalledSoftware{
     | select DisplayName, DisplayVersion, Publisher, InstallLocation
 
     $software_versions | Format-Table -AutoSize | Out-String -Width 4096
+
+    if (Test-CommandExists Get-ChildItem){
+        $software_dirs = ('C:\Program Files (x86)\','C:\Program Files\','C:\')
+        ForEach ($dir in $software_dirs){
+            if (Test-Path -Path $dir){
+                Write-Output "List of Program Directories in $dir"
+                Get-ChildItem $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
+            }
+        }
+    }
 }
 
 Function Get-InstalledHotFixes{
@@ -298,6 +308,26 @@ Function Get-InterfaceConfig{
     $data | Format-Table -Property Interface,IP,MAC -AutoSize | Out-String -Width 4096
 }
 
+Function Get-RouteConfig{
+
+    if (Test-CommandExists Get-NetRoute){
+        Get-NetRoute | Format-Table -Property InterfaceIndex,InterfaceAlias,DestinationPrefix,NextHop,State,AddressFamily
+    } else {
+        Get-CimInstance -ClassName win32_IP4RouteTable | Format-Table -Property InterfaceIndex,Destination,Mask,NextHop,Age
+    }
+}
+
+Function Get-SharedFolders {
+    if (Test-CommandExists Get-SmbShare){
+        Get-SmbShare | Format-Table -Property Name,Description,Path,ShareType,ShareState,CurrentUsers,EncryptData -AutoSize | Out-String -Width 4096
+        if (Test-CommandExists Get-FileShare){
+            Get-FileShare -ErrorAction SilentlyContinue | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
+        }
+    }else{
+        Get-CimInstance -ClassName Win32_Share | Format-Table -Property Name,Description,Path,Status -AutoSize | Out-String -Width 4096
+    }
+}
+
 Function Get-VulnCheck{
     # Check for NetBIOS configuration. Requires PSv3
     if (Test-CommandExists Get-NetAdapter){
@@ -321,17 +351,6 @@ Function Get-VulnCheck{
     if (Test-CommandExists Get-SmbServerConfiguration){
         Write-Output "`nSMB Configurations:"
         Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
-    }
-}
-
-Function Get-SharedFolders {
-    if (Test-CommandExists Get-SmbShare){
-        Get-SmbShare | Format-Table -Property Name,Description,Path,ShareType,ShareState,CurrentUsers,EncryptData -AutoSize | Out-String -Width 4096
-        if (Test-CommandExists Get-FileShare){
-            Get-FileShare | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
-        }
-    }else{
-        Get-CimInstance -ClassName Win32_Share | Format-Table -Property Name,Description,Path,Status -AutoSize | Out-String -Width 4096
     }
 }
 
@@ -407,6 +426,12 @@ Get-SysAVInfo
 $secName = "Network Interfaces"
 Prt-SectionHeader $secName
 Get-InterfaceConfig
+
+# Network Routes
+#############################
+$secName = "Network Routes"
+Prt-SectionHeader $secName
+Get-RouteConfig
 
 # Common Vulnerability Checks
 #############################
