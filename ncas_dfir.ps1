@@ -5,7 +5,7 @@
         Get-CmdInstance (requires PSv3) and output to the screen. 
         This script collects static and volatile information.
     Author: Don C. Weber (@cutaway)
-    Date:   April 12, 2022
+    Date:   May 18, 2022
 #>
 
 <#
@@ -39,11 +39,10 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 # Set up document header information
 #############################
 $script_name         = 'ncas_dfir'
-$script_version      = '1.0.2'
-$start_time          = Get-Date -format yyyyMMddHHmmssff
-$start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
+$script_version      = '1.0.3'
+$start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm:ss K"
 $computername        = $env:ComputerName
-$runname             = $company_sh + '_' + $start_time
+$sysdrive            = $env:SystemDrive
 
 #############################
 # Print Functions
@@ -77,7 +76,7 @@ function Prt-ReportHeader{
 
 function Prt-ReportFooter{
 
-    $stop_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm"
+    $stop_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm:ss K"
 
     Write-Output "`n#############################"
     Write-Output "# $script_name completed"
@@ -98,8 +97,9 @@ function Prt-CutSec-ReportFooter{
 }
 
 #############################
-# Test Cmdlet Exists, to help default to Get-CimInstance
+# Helper Functions
 #############################
+# Check for Cmdlet, else use CimInstance
 Function Test-CommandExists{
     Param ($command)
     $oldPreference = $ErrorActionPreference
@@ -109,8 +109,7 @@ Function Test-CommandExists{
     Finally {$ErrorActionPreference=$oldPreference}
 } 
 
-# Check for Administrator Role 
-####################
+# Check for Administrator Role
 Function Get-AdminState {
 	if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")){ 
 		Write-Output "# Script Running As Normal User" 
@@ -134,6 +133,24 @@ Function Get-SystemInfo{
     $sysdata
 }
 
+Function Get-TimezoneInfo{
+    if (Test-CommandExists Get-TimeZone){
+        $timezone = Get-TimeZone
+    }else{
+        $timezone = Get-CimInstance -ClassName Win32_TimeZone | Select-Object -Property Caption,Bias,StandardName,DaylightName,DaylightBias  
+    }
+    $timezone
+}
+
+Function Get-NtpInfo{
+    # Reference: https://docs.microsoft.com/en-us/windows-server/networking/windows-time-service/windows-time-service-tools-and-settings
+    $ntptype = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\services\W32Time\Parameters").Type
+    Write-Output "Server syncronization setting: $ntptype"
+    # NTP Server settings
+    $ntpservers = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\w32time\Parameters" -Name "NtpServer").NtpServer
+    Write-Output "NTP Server Sources: $ntpservers"
+}
+
 Function Get-InstalledSoftware{
     $array = @()
 
@@ -142,7 +159,8 @@ Function Get-InstalledSoftware{
 
     ForEach ($UninstallKey in $UninstallKeys){
         Try {
-            Get-Item -Path "HKLM:\\$UninstallKey"
+            # Test to see if the key exists, we don't need contents. Save so it doesn't print
+            $installkeyinfo = Get-Item -Path "HKLM:\\$UninstallKey"
         } Catch {
             Continue
         }
@@ -174,13 +192,13 @@ Function Get-InstalledSoftware{
         $software_versions | Format-Table -AutoSize | Out-String -Width 4096
     }
 
-
+    # List the directories in the System Drive 
     if (Test-CommandExists Get-ChildItem){
-        $software_dirs = ('C:\Program Files (x86)\','C:\Program Files\','C:\')
+        $software_dirs = ("$sysdrive\Program Files (x86)\","$sysdrive\Program Files\",$sysdrive)
         ForEach ($dir in $software_dirs){
             if (Test-Path -Path $dir){
                 Write-Output "List of Program Directories in $dir"
-                Get-ChildItem $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
+                Get-ChildItem -Directory $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
             }
         }
     }
@@ -367,6 +385,11 @@ Function Get-VulnCheck{
 #############################
 # Volatile Information Collection Functions
 #############################
+Function Get-EnvInfo{
+    # Get all of the current ENV parameters
+    Get-ChildItem env:
+}
+
 Function Get-TCPServicesInfo{
     # Make a lookup table by process ID 
     $Processes = @{}
@@ -649,7 +672,7 @@ Function Get-AuthEvents {
 }
 
 Function Get-PreFetch{
-    $prefetch_dir = ('C:\Windows\Prefetch')
+    $prefetch_dir = ("$sysdrive\Windows\Prefetch")
     if (Test-CommandExists Get-ChildItem){
         ForEach ($dir in $prefetch_dir){
             if (Test-Path -Path $dir){
@@ -678,6 +701,18 @@ $sysinfo = ''
 $secName = "Computer Information"
 Prt-SectionHeader $secName
 Get-SystemInfo
+
+# Timezone Information
+#############################
+$secName = "Timezone Information"
+Prt-SectionHeader $secName
+Get-TimezoneInfo
+
+# NTP Configuration Information
+#############################
+$secName = "NTP Configuration Information"
+Prt-SectionHeader $secName
+Get-NtpInfo
 
 # Installed Applications
 #############################
@@ -756,6 +791,12 @@ Get-SharedFolders
 #############################
 # Volatile Information Collection 
 #############################
+
+# Environmental Variables
+#############################
+$secName = "Environmental Variables"
+Prt-SectionHeader $secName
+Get-EnvInfo
 
 # Network TCP Connections
 #############################
