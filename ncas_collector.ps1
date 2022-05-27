@@ -4,7 +4,7 @@
         data from the system using default Cmdlets or using the
         Get-CmdInstance (requires PSv3) and output to the screen. 
     Author: Don C. Weber (@cutaway)
-    Date:   May 18, 2022
+    Date:   May 25, 2022
 #>
 
 <#
@@ -38,7 +38,7 @@ $global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ens
 # Set up document header information
 #############################
 $script_name         = 'ncas_collector'
-$script_version      = '1.0.3'
+$script_version      = '1.0.4'
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm:ss K"
 $computername        = $env:ComputerName
 $sysdrive            = $env:SystemDrive
@@ -232,7 +232,7 @@ Function Get-LocalGroupAccounts{
 
 Function Get-LocalAccountMembers{
 
-    $gprops = @{'Group Name'='';Name='';SID=''}
+    $gprops = @{'Group Name'='';UserName='';SID=''}
     $gmems_Template = New-Object -TypeName PSObject -Property $gprops
 
     if ((Test-CommandExists Get-LocalGroup) -and (Test-CommandExists Get-LocalGroupMamber)){
@@ -243,7 +243,7 @@ Function Get-LocalAccountMembers{
             Get-LocalGroupMember $gmn | ForEach-Object {
                 $gmems = $gmems_Template.PSObject.Copy()
                 $gmems.'Group Name' = $gmn
-                $gmems.Name = $_.Name
+                $gmems.UserName = $_.Name
                 $gmems.SID = $_.SID
                 $gmems
             }
@@ -256,14 +256,14 @@ Function Get-LocalAccountMembers{
             Get-CimInstance win32_group -Filter "LocalAccount=TRUE and Name='$gmn'" | Get-CimAssociatedInstance -Association Win32_GroupUser | ForEach-Object {
                 $gmems = $gmems_Template.PSObject.Copy()
                 $gmems.'Group Name' = $gmn
-                $gmems.Name = $_.Name
+                $gmems.UserName = $_.Name
                 $gmems.SID = $_.SID
                 $gmems
             }
         }
     }
 
-    $gcombined | Format-Table -Property 'Group Name',Name,SID -AutoSize | Out-String -Width 4096
+    $gcombined | Format-Table -Property 'Group Name',UserName,SID -AutoSize | Out-String -Width 4096
 }
 
 Function Get-WinEventLogs{
