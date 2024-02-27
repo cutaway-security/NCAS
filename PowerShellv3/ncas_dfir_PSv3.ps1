@@ -131,6 +131,7 @@ Function Get-SystemInfo{
         $sysdata = $sysinfo | Select-String -Pattern '^OS Version','^OS Name','^System Type','^Domain'  
     }
     $sysdata
+    systeminfo > ${env:computername}_systeminfo_$(Get-Date -Format "yyyyddMM_HHmmss").txt
 }
 
 Function Get-TimezoneInfo{

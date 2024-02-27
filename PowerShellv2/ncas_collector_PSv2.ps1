@@ -1,15 +1,15 @@
 <#
-	ncas_collector.ps1 - NERC CIP Assessment Script for Windows system
-        with PowerShell greater than 3. This script will collect 
-        data from the system using default Cmdlets or using the
-        Get-CmdInstance (requires PSv3) and output to the screen. 
+	ncas_collector_PSv2.ps1 - NERC CIP Assessment Script for Windows system
+        with PowerShell version 2. This script will collect 
+        data from the system using default Cmdlets or system
+	commands. 
     Author: Don C. Weber (@cutaway)
-    Date:   May 25, 2022
+    Date:   February 27, 2024
 #>
 
 <#
 	License: 
-	Copyright (c) 2022, Cutaway Security, Inc. <dev [@] cutawaysecurity.com>
+	Copyright (c) 2024, Cutaway Security, Inc. <dev [@] cutawaysecurity.com>
 	
 	ncas_collector.ps1 is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -31,21 +31,38 @@
 $cutsec_footer       = $true # change to false to disable CutSec footer
 $auditor_company     = 'Cutaway Security, LLC' # make empty string to disable
 $sitename            = 'plant1' # make empty string to disable
-$global:admin_user  = $false # Disable some checks if not running as an Administrator
-$global:ps_version  = $PSVersionTable.PSVersion.Major # Get major version to ensure at least PSv3
+$global:admin_user   = $false # Disable some checks if not running as an Administrator
+$global:ps_version   = $PSVersionTable.PSVersion.Major # Get major version to ensure at least PSv3
 
 #############################
 # Set up document header information
 #############################
 $script_name         = 'ncas_collector'
-$script_version      = '1.0.4'
+$script_version      = '1.0.0'
+$filename_date	     = Get-Date -Format "yyyyddMM_HHmmss"
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm:ss K"
 $computername        = $env:ComputerName
 $sysdrive            = $env:SystemDrive
+$outdir              = $computername + "_" + $filename_date
 
 #############################
 # Print Functions
 #############################
+Function Mkdir-Output{
+
+	Param(
+		# Create the output directory in the local directory.
+                # Change into the directory to write data.
+		$indir = 'Results directory'
+	)
+
+    Write-Output "`n#############################"
+    Write-Output "# Creating output directory named: $indir"
+    Write-Output "#############################"
+    if (-not(test-path $indir)){new-item $indir -ItemType Directory | Out-Null}
+    Set-Location -Path $indir
+}
+
 Function Prt-SectionHeader{
 
 	Param(
@@ -53,9 +70,9 @@ Function Prt-SectionHeader{
 		$SectionName = 'Section Name'
 	)
 
-    Write-Output "`n#############################"
+    # Write-Output "`n#############################"
     Write-Output "# $SectionName"
-    Write-Output "#############################"
+    # Write-Output "#############################"
 }
 
 Function Prt-ReportHeader{
@@ -113,7 +130,7 @@ Function Get-AdminState {
 		Write-Output "# Script Running As Normal User" 
         $global:admin_user = $false
 	} else {
-		Write-Output "# Script Running As Administrator" 
+		Write-Output "# Script Running As Administrator"
         $global:admin_user = $true
     }
 }
@@ -122,31 +139,28 @@ Function Get-AdminState {
 # Information Collection Functions
 #############################
 Function Get-SystemInfo{
-    if (Test-CommandExists Get-ComputerInfo){
-        $sysdata = Get-ComputerInfo -Property WindowsProductName,OsVersion,WindowsCurrentVersion,WindowsVersion,OsArchitecture,CsWorkgroup
-    }else{
-        if ($sysinfo -eq ''){$sysinfo = systeminfo}
-        $sysdata = $sysinfo | Select-String -Pattern '^OS Version','^OS Name','^System Type','^Domain'  
-    }
-    $sysdata
+    # Get systeminfo for use with WES-NG
+    $sysinfo = systeminfo 
+    $sysinfo | Out-file -FilePath systeminfo.txt
 }
 
 Function Get-TimezoneInfo{
-    if (Test-CommandExists Get-TimeZone){
-        $timezone = Get-TimeZone
-    }else{
-        $timezone = Get-CimInstance -ClassName Win32_TimeZone | Select-Object -Property Caption,Bias,StandardName,DaylightName,DaylightBias  
-    }
-    $timezone
+    $timezone = wmic timezone get caption | Select-Object -Index 2  
+    $timezone | Out-file -FilePath timezone.txt
 }
 
 Function Get-NtpInfo{
     # Reference: https://docs.microsoft.com/en-us/windows-server/networking/windows-time-service/windows-time-service-tools-and-settings
     $ntptype = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\services\W32Time\Parameters").Type
-    Write-Output "Server syncronization setting: $ntptype"
+    # Write-Output "Server syncronization setting: $ntptype"
+    $outstring = "Server syncronization setting: $ntptype"
+    $outstring | Out-file -FilePath ntp_info.txt
+
     # NTP Server settings
     $ntpservers = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\w32time\Parameters" -Name "NtpServer").NtpServer
-    Write-Output "NTP Server Sources: $ntpservers"
+    #Write-Output "NTP Server Sources: $ntpservers"
+    $outstring = "NTP Server Sources: $ntpservers"
+    $outstring | Out-file -Append -FilePath ntp_info.txt
 }
 
 Function Get-InstalledSoftware{
@@ -162,7 +176,7 @@ Function Get-InstalledSoftware{
         } Catch {
             Continue
         }
-        Write-Output "Processing UninstallKey $UninstallKey"
+        Write-Output "Processing UninstallKey $UninstallKey" | Out-file -Append -FilePath software_uninstallkey.txt
         #Create an instance of the Registry Object and open the HKLM base key
         $reg=[microsoft.win32.registrykey]::OpenRemoteBaseKey('LocalMachine',$computername) 
 
@@ -184,50 +198,46 @@ Function Get-InstalledSoftware{
             $array += $obj
         } 
 
-        $software_versions = $array | Where-Object { $_.DisplayName } `
-        | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation
-
-        $software_versions | Format-Table -AutoSize | Out-String -Width 4096
+        $software_versions += $array | Where-Object { $_.DisplayName } `
+        | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation        
     }
+    $software_versions | Export-Csv -Path software_uninstallkey.csv -NoTypeInformation
 
     # List the directories in the System Drive 
     if (Test-CommandExists Get-ChildItem){
-        $software_dirs = ("$sysdrive\Program Files (x86)\","$sysdrive\Program Files\",$sysdrive)
+        $software_dirs = ("$sysdrive\Program Files (x86)\","$sysdrive\Program Files\","$sysdrive\")
         ForEach ($dir in $software_dirs){
             if (Test-Path -Path $dir){
-                Write-Output "List of Program Directories in $dir"
-                Get-ChildItem -Directory $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
+                $contents += Get-ChildItem $dir | ?{ $_.PSIsContainer } `
+                | Select-Object -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
             }
         }
-    }
+    } 
+    $contents | Export-Csv -Path software_directories.csv -NoTypeInformation
+
 }
 
 Function Get-InstalledHotFixes{
-    if (Test-CommandExists Get-HotFix){
-        Get-HotFix | Format-Table -Property HotFixID,Description,InstalledOn -AutoSize | Out-String -Width 4096
-    }else{
-        Get-CimInstance -ClassName Win32_QuickFixEngineering | Format-Table -Property HotFixID,Description,InstalledOn -AutoSize | Out-String -Width 4096
-    }
+    Get-Wmiobject -class Win32_QuickFixEngineering -namespace "root\cimv2" `
+    | Select-Object -Property HotFixID,Description,InstalledOn | Export-Csv -Path .\hotfixes.csv -NoTypeInformation
 }
 
 Function Get-InstalledServices{
-    Get-CimInstance -ClassName win32_service  | Format-Table Name, Startname, Startmode, Pathname -AutoSize | Out-String -Width 4096
+    Get-WmiObject -Class Win32_Service | Select-Object -Property Name,DisplayName,StartMode,State,ProcessId `
+    | Export-Csv .\services.csv -NoTypeInformation
+    
 }
 
 Function Get-LocalAccounts{
-    if (Test-CommandExists Get-LocalUser){
-        Get-LocalUser | Format-Table -Property Name,SID,Enabled,PasswordRequired,PasswordExpires -AutoSize | Out-String -Width 4096
-    }else{
-        Get-CimInstance -ClassName Win32_UserAccount | Format-Table -Property Name,SID,Disabled,PasswordRequired,PasswordExpires -AutoSize | Out-String -Width 4096
-    }
+    Get-WmiObject -Class Win32_Useraccount -filter "Localaccount = True" `
+    | Select-Object -Property SID,Name,Status,PasswordRequired `
+    | Export-CSV -Path .\localaccounts.csv -NoTypeInformation
 }
 
 Function Get-LocalGroupAccounts{
-    if (Test-CommandExists Get-LocalUser){
-        Get-LocalGroup | Format-Table -Property Name,SID -AutoSize | Out-String -Width 4096
-    }else{
-        Get-CimInstance -ClassName Win32_Group | Format-Table -Property Name,SID -AutoSize | Out-String -Width 4096
-    }
+    Get-WmiObject -Class Win32_Group -Filter "LocalAccount = True" `
+    | Select-Object -Property Caption,SID,Name `
+    | Export-CSV -Path .\localgroups.csv -NoTypeInformation
 }
 
 Function Get-LocalAccountMembers{
@@ -235,48 +245,34 @@ Function Get-LocalAccountMembers{
     $gprops = @{'Group Name'='';UserName='';SID=''}
     $gmems_Template = New-Object -TypeName PSObject -Property $gprops
 
-    if ((Test-CommandExists Get-LocalGroup) -and (Test-CommandExists Get-LocalGroupMamber)){
-        $groups = Get-LocalGroup
+    $groups = Get-WmiObject -Class Win32_Group -Filter "LocalAccount = True"
 
-        $gcombined = $groups | ForEach-Object {
-            $gmn = $_.Name
-            Get-LocalGroupMember $gmn | ForEach-Object {
-                $gmems = $gmems_Template.PSObject.Copy()
-                $gmems.'Group Name' = $gmn
-                $gmems.UserName = $_.Name
-                $gmems.SID = $_.SID
-                $gmems
-            }
-        }
-    }else{
-        $groups = Get-CimInstance Win32_group -Filter "LocalAccount=TRUE"
+    $gcombined = $groups | ForEach-Object {
+        $gmn = $_.Name
 
-        $gcombined = $groups | ForEach-Object {
-            $gmn = $_.Name
-            Get-CimInstance win32_group -Filter "LocalAccount=TRUE and Name='$gmn'" | Get-CimAssociatedInstance -Association Win32_GroupUser | ForEach-Object {
-                $gmems = $gmems_Template.PSObject.Copy()
-                $gmems.'Group Name' = $gmn
-                $gmems.UserName = $_.Name
-                $gmems.SID = $_.SID
-                $gmems
-            }
+        (Get-WmiObject -Class Win32_Group -Filter "LocalAccount = TRUE and `
+        Name= '$gmn'").GetRelated("Win32_Account", "Win32_GroupUser", "", "", `
+        "PartComponent", "GroupComponent", $false, $null) | Select-Object -Property Name,SID | ForEach-Object{
+            $gmems = $gmems_Template.PSObject.Copy()
+            $gmems.'Group Name' = $gmn
+            $gmems.UserName = $_.Name
+            $gmems.SID = $_.SID
+            $gmems
         }
     }
 
-    $gcombined | Format-Table -Property 'Group Name',UserName,SID -AutoSize | Out-String -Width 4096
+    $gcombined | Export-Csv -Path .\localgroup_members.csv -NoTypeInformation
 }
 
 Function Get-WinEventLogs{
     $winlogs = @('Application','Security','System','Windows PowerShell','Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational','Microsoft-Windows-PowerShell/Operational','Microsoft-Windows-WMI-Activity/Operational')
     # Get-WinEvent is available in PSv3
-    Get-WinEvent -ListLog $winlogs -ErrorAction SilentlyContinue | Format-Table LogName,MaximumSizeInBytes,FileSize,RecordCount,LogMode -AutoSize | Out-String -Width 4096
+    Get-WinEvent -ListLog $winlogs -ErrorAction SilentlyContinue `
+    | Select-Object -Property LogName,MaximumSizeInBytes,FileSize,RecordCount,LogMode `
+    | Export-Csv -Path eventlog_settings.csv -NoTypeInformation
 }
 
 Function Get-SysAVInfo{
-    if (Test-CommandExists Get-MPComputerStatus){
-        Write-Output "# Windows Defender Status"
-        Get-MPComputerStatus
-    }
 
     try{
         $avstate = @{
@@ -296,93 +292,50 @@ Function Get-SysAVInfo{
 
         $avprodprops = @{'Product Name'='';'Definition Status'='';'Real-Time Protection'='';'Path'=''}
         $avprod_Template = New-Object -TypeName PSObject -Property $avprodprops
-        Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct -ErrorAction Stop | ForEach-Object {
+        Get-WmiObject -Namespace root/SecurityCenter2 -Class AntivirusProduct -ErrorAction Stop | ForEach-Object {
             $avprod = $avprod_Template.PSObject.Copy()
             $avprod.'Product Name' = $_.displayName
             $avprod.'Definition Status' = $avstate[[string]$_.productState].defstatus
             $avprod.'Real-Time Protection' = $avstate[[string]$_.productState].rtstatus
             $avprod.'Path' = $_.pathToSignedProductExe
         }
-        Write-Output "# Other Anti-Virus Status"
-        $avprod | Format-Table -Property 'Product Name','Definition Status','Real-Time Protection','Path' -AutoSize | Out-String -Width 4096
-    }Catch{ Write-Output "Other Anti-Virus Status Check Failed" }
+        $avprod | Select-Object -Property 'Product Name','Definition Status','Real-Time Protection','Path' `
+        | Export-Csv -Path .\antivirus.csv -NoTypeInformation
+    }Catch{ Write-Output "Anti-Virus Status Check Failed" }
 }
 
 Function Get-InterfaceConfig{
-    if ((Test-CommandExists Get-LocalGroup) -and (Test-CommandExists Get-LocalGroupMember)){
-        $data = @()
-        $netinfo = Get-NetIPConfiguration -Detailed 
-        foreach ( $nic in $netinfo) { 
-            foreach ($ip in $nic) { 
-                $data += [pscustomobject] @{
-                    Interface=$nic.InterfaceAlias;  
-                    IP=$ip.IPv4Address,($ip.IPv6LinkLocalAddress.IPAddress -Split '%')[0]
-                    MAC=$nic.NetAdapter.MACAddress;
-                }
-            }
-        } 
-    }else{
-        $data = ForEach ($Adapter in (Get-CimInstance -ClassName Win32_NetworkAdapter -Filter "NetEnabled='True'")){  
-            $Config = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "Index = '$($Adapter.Index)'"
-            New-Object PSObject -Property @{
-                Interface = $Adapter.NetConnectionID
-                IP = $Config.IPAddress
-                MAC = $Config.MacAddress
-            }
-        } 
-    }
-    $data | Format-Table -Property Interface,IP,MAC -AutoSize | Out-String -Width 4096
+
+    $data = ForEach ($Adapter in (Get-WmiObject -Class Win32_NetworkAdapter -Filter "NetEnabled='True'")){  
+        $Config = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter "Index = '$($Adapter.Index)'"
+        New-Object PSObject -Property @{
+            Interface = $Adapter.NetConnectionID
+            IP = $Config.IPAddress
+            MAC = $Config.MacAddress
+        }
+    } 
+
+    $data | Select-Object -Property Interface,IP,MAC `
+    | Export-Csv -Path network_interfaces.csv -NoTypeInformation
 }
 
 Function Get-RouteConfig{
-
-    if (Test-CommandExists Get-NetRoute){
-        Get-NetRoute | Format-Table -Property InterfaceIndex,InterfaceAlias,DestinationPrefix,NextHop,State,AddressFamily
-    } else {
-        Get-CimInstance -ClassName win32_IP4RouteTable | Format-Table -Property InterfaceIndex,Destination,Mask,NextHop,Age
-    }
+Get-WmiObject -Class win32_IP4RouteTable | Select-Object -Property InterfaceIndex,Destination,Mask,NextHop,Age `
+    | Export-Csv -Path routes.csv -NoTypeInformation
 }
 
 Function Get-SharedFolders {
-    if (Test-CommandExists Get-SmbShare){
-        Get-SmbShare | Format-Table -Property Name,Description,Path,ShareType,ShareState,CurrentUsers,EncryptData -AutoSize | Out-String -Width 4096
-        if (Test-CommandExists Get-FileShare){
-            Get-FileShare -ErrorAction SilentlyContinue | Format-Table -Property Name,UniqueId,Description,EncryptData,VolumeRelativePath,PassThroughClass
-        }
-    }else{
-        Get-CimInstance -ClassName Win32_Share | Format-Table -Property Name,Description,Path,Status -AutoSize | Out-String -Width 4096
-    }
-}
-
-Function Get-VulnCheck{
-    # Check for NetBIOS configuration. Requires PSv3
-    if (Test-CommandExists Get-NetAdapter){
-        Write-Output "NetBIOS Configurations:"
-        (Get-NetAdapter -Physical | Where-Object {$_.Name -NotLike '*Loopback*' -And $_.Status -eq 'Up'}) | ForEach-Object -Process {
-            $if_guid = $_.InterfaceGuid; 
-            $if_nb_setting = (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\TCPIP_$if_guid).NetbiosOptions; 
-            $if_name = $_.Name;
-            if ($if_nb_setting){$nb_config = 'Enabled'}else{$nb_config = 'Disabled'}
-            Write-Output "Interface $if_name : NetBIOS $nb_config [$if_nb_setting]";
-        }
-    }
-
-    # Check if SMBv1 is Enabled
-    if (Test-CommandExists Get-WindowsOptionalFeature){
-        $smb_state = (Get-WindowsOptionalFeature -Online -FeatureName smb1protocol).State
-        Write-Output "`nSMBv1 is currently: $smb_state"
-    }
-
-    # Check SMB Configuration
-    if (Test-CommandExists Get-SmbServerConfiguration){
-        Write-Output "`nSMB Configurations:"
-        Get-SmbServerConfiguration | Format-List -Property EncryptData,EnableSMB1Protocol,EnableSMB2Protocol,EnableSecuritySignature
-    }
+    Get-WmiObject -Class Win32_Share | Select-Object -Property Name,Path,Description,Status,Caption `
+    | Export-Csv -Path shares.csv -NoTypeInformation
 }
 
 #############################
 # Main
 #############################
+
+# Output Directory
+#############################
+Mkdir-Output $outdir
 
 # Report Header
 #############################
@@ -470,14 +423,6 @@ Get-InterfaceConfig
 $secName = "Network Routes"
 Prt-SectionHeader $secName
 Get-RouteConfig
-
-# Common Vulnerability Checks
-#############################
-if (($global:admin_user) -and ([int]$global:ps_version -gt 2)){
-    $secName = "Common Vulnerability Checks"
-    Prt-SectionHeader $secName
-    Get-VulnCheck
-}
 
 # File Shares
 #############################
