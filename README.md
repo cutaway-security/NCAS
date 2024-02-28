@@ -116,7 +116,7 @@ Organizations using these scripts for NERC CIP compliance must review the output
 ## Windows Systems Tested 
 
 * CMD Version
-  * Workstation 7,10
+  * Workstation XP,7,10,11
 * PSv2 Version
   * Workstation 7,10
 * PSv3 Version
@@ -136,6 +136,13 @@ Organizations using these scripts for NERC CIP compliance must review the output
 * VulnChecker
   * Add time boundaries to searches
   * Identify vendor strings for common software and industrial vendors
+
+
+# Collaborators
+CutSec would like to thank the following people and organizations for contributing, testing, and troubleshooting this project.
+
+* Tom Liston - Bad Wolf Security, LLC
+* Aaron Crow - [Corvo Security, LLC](https://corvosec.com/)
 
 # Contact
 To request assistance or schedule an assessment, please contact Cutaway Security at 'info [@] cutawaysecurity.com'.

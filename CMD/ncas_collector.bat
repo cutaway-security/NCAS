@@ -38,7 +38,7 @@ CALL :getDate STARTSTAMP
 echo ##########################
 echo NCAS Script Started at %STARTSTAMP%
 echo ##########################
-echo:
+echo.
 
 rem ##########################
 echo Checking for Administrator Rights
@@ -78,12 +78,26 @@ wmic product get Name,Version,Installdate /format:csv > software-wmic.csv
 rem ##########################
 echo Get Installed Sofware - dir
 rem ##########################
-For /l %%d in ("C:\", "C:\Program Files", "C:\Program Files (x86)") do (
-    IF exists %%d (
-        echo ##### >> software-dir.txt
-        echo Listing %%d directory >> software-dir.txt
-        dir %%d /A:D >> software-dir.txt
-    )
+IF EXIST "C:\" (
+    echo ##### >> software-dir.txt
+    echo "Listing C:\ directory" >> software-dir.txt
+    echo ##### >> software-dir.txt
+    dir "C:\" /A:D >> software-dir.txt
+    echo. >> software-dir.txt
+)
+IF EXIST "C:\Program Files\" (
+    echo ##### >> software-dir.txt
+    echo "Listing C:\Program Files\ directory" >> software-dir.txt
+    echo ##### >> software-dir.txt
+    dir "C:\Program Files\" /A:D >> software-dir.txt
+    echo. >> software-dir.txt
+)
+IF EXIST "C:\Program Files (x86)\" (
+    echo ##### >> software-dir.txt
+    echo "Listing C:\Program Files (x86)\ directory" >> software-dir.txt
+    echo ##### >> software-dir.txt
+    dir "C:\Program Files (x86)\" /A:D >> software-dir.txt
+    echo. >> software-dir.txt
 )
 
 rem ##########################
@@ -196,7 +210,7 @@ rem Completed
 rem ##########################
 cd ..
 CALL :getDate ENDSTAMP
-echo:
+echo.
 echo ##########################
 echo NCAS Script Completed at %ENDSTAMP%
 IF defined PRINTORG echo Brought to you by %ORG_NAME%
