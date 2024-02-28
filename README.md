@@ -12,7 +12,7 @@ Develop a baseline configuration, individually or by group, which shall include 
 * 1.1.4. Any logical network accessible ports; and
 * 1.1.5. Any security patches applied.
 
-# Disclaimer
+## Disclaimer ***Please read before use in NERC CIP efforts.***
 
 The NCAS scripts are distributed in the hope that they will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. These scripts are designed for information gathering only and will not make any changes or write any files to the system. However, running any program or script on a workstation or server can produce unintentional results. Use these scripts at your own risk.
 
@@ -136,7 +136,6 @@ Organizations using these scripts for NERC CIP compliance must review the output
 * VulnChecker
   * Add time boundaries to searches
   * Identify vendor strings for common software and industrial vendors
-
 
 # Collaborators
 CutSec would like to thank the following people and organizations for contributing, testing, and troubleshooting this project.
