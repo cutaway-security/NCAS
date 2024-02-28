@@ -78,20 +78,13 @@ wmic product get Name,Version,Installdate /format:csv > software-wmic.csv
 rem ##########################
 echo Get Installed Sofware - dir
 rem ##########################
-echo ##### > software-dir.txt
-echo Listing "C:\" directory >> software-dir.txt
-echo ##### >> software-dir.txt
-dir "C:\" /A:D >> software-dir.txt
-echo: >> software-dir.txt
-echo ##### >> software-dir.txt
-echo Listing "C:\Program Files" directory >> software-dir.txt
-echo ##### >> software-dir.txt
-dir "C:\Program Files" /A:D >> software-dir.txt
-echo: >> software-dir.txt
-echo ##### >> software-dir.txt
-echo Listing "C:\Program Files (x86)" directory >> software-dir.txt
-echo ##### >> software-dir.txt
-dir "C:\Program Files (x86)" /A:D >> software-dir.txt
+For /l %%d in ("C:\", "C:\Program Files", "C:\Program Files (x86)") do (
+    IF exists %%d (
+        echo ##### >> software-dir.txt
+        echo Listing %%d directory >> software-dir.txt
+        dir %%d /A:D >> software-dir.txt
+    )
+)
 
 rem ##########################
 echo Get Installed Patches
