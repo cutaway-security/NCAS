@@ -4,7 +4,7 @@
         data from the system using default Cmdlets or system
 	commands. 
     Author: Don C. Weber (@cutaway)
-    Date:   February 27, 2024
+    Date:   March 1, 2024
 #>
 
 <#
@@ -25,6 +25,32 @@
 	Point Of Contact:    Don C. Weber <dev [@] cutawaysecurity.com>
 #>
 
+param (
+    # The config parameter will print the current configuration and exit
+    # See Collection Parameters section to manage script behavior
+    # To use `ncas_collector_PSv2.ps1 -config`
+    [switch]$config = $false
+ )
+
+#############################
+# Collection Parameters
+# NOTE: Set these to $false to disable
+#############################
+$getSysInfo      = $true
+$getTimeZone     = $true
+$getNTP          = $true
+$getSoftware     = $true
+$getPatches      = $true
+$getServices     = $true
+$getAccounts     = $true
+$getGroups       = $true
+$getGroupMembers = $true
+$getLogConfigs   = $true
+$getAVInfo       = $true
+$getInterfaces   = $true
+$getRoutes       = $true
+$getShares       = $true
+
 #############################
 # Script behavior parameters
 #############################
@@ -38,7 +64,7 @@ $global:ps_version   = $PSVersionTable.PSVersion.Major # Get major version to en
 # Set up document header information
 #############################
 $script_name         = 'ncas_collector'
-$script_version      = '1.0.0'
+$script_version      = '1.0.1'
 $filename_date	     = Get-Date -Format "yyyyddMM_HHmmss"
 $start_time_readable = Get-Date -Format "dddd MM/dd/yyyy HH:mm:ss K"
 $computername        = $env:ComputerName
@@ -108,7 +134,26 @@ Function Prt-CutSec-ReportFooter{
     Write-Output "# For assessment and auditing help, contact info [@] cutawaysecurity.com"
     Write-Output "# For script help, contact dev [@] cutawaysecurity.com"
     Write-Output "#############################`n"
+}
 
+Function Prt-Config{
+    Write-Output "$script_name $script_version Configuration:"
+    Write-Output "    Get System Information: $getSysInfo"
+    Write-Output "    Get Timezone setting: $getTimeZone"
+    Write-Output "    Get NTP setting: $getNTP"
+    Write-Output "    Get Installed Software: $getSoftware"
+    Write-Output "    Get Installed Patches: $getPatches"
+    Write-Output "    Get Services: $getServices"
+    Write-Output "    Get Local Accounts: $getAccounts"
+    Write-Output "    Get Local Groups: $getGroups"
+    Write-Output "    Get Local Group Members: $getGroupMembers"
+    Write-Output "    Get Event Log Configurations: $getLogConfigs"
+    Write-Output "    Get AV Information: $getAVInfo"
+    Write-Output "    Get Network Interface Information: $getInterfaces"
+    Write-Output "    Get Network Route Settings: $getRoutes"
+    Write-Output "    Get Ntework Shares: $getShares"
+    Write-Output "`nSee the Collection Parameters section to manage script behavior.`n"
+    exit
 }
 
 #############################
@@ -138,18 +183,21 @@ Function Get-AdminState {
 #############################
 # Information Collection Functions
 #############################
-Function Get-SystemInfo{
+Function Get-SystemInfo{    
+    Prt-SectionHeader "Computer Information"
     # Get systeminfo for use with WES-NG
     $sysinfo = systeminfo 
     $sysinfo | Out-file -FilePath systeminfo.txt
 }
 
 Function Get-TimezoneInfo{
+    Prt-SectionHeader "Timezone Information"
     $timezone = wmic timezone get caption | Select-Object -Index 2  
     $timezone | Out-file -FilePath timezone.txt
 }
 
 Function Get-NtpInfo{
+    Prt-SectionHeader "NTP Configuration Information"
     # Reference: https://docs.microsoft.com/en-us/windows-server/networking/windows-time-service/windows-time-service-tools-and-settings
     $ntptype = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\services\W32Time\Parameters").Type
     # Write-Output "Server syncronization setting: $ntptype"
@@ -164,6 +212,7 @@ Function Get-NtpInfo{
 }
 
 Function Get-InstalledSoftware{
+    Prt-SectionHeader "Installed Applications"
     $array = @()
 
     #Define the variable to hold the location of Currently Installed Programs
@@ -218,29 +267,34 @@ Function Get-InstalledSoftware{
 }
 
 Function Get-InstalledHotFixes{
+    Prt-SectionHeader "Installed Patches"
     Get-Wmiobject -class Win32_QuickFixEngineering -namespace "root\cimv2" `
     | Select-Object -Property HotFixID,Description,InstalledOn | Export-Csv -Path .\hotfixes.csv -NoTypeInformation
 }
 
 Function Get-InstalledServices{
+    Prt-SectionHeader "Installed Services"
     Get-WmiObject -Class Win32_Service | Select-Object -Property Name,DisplayName,StartMode,State,ProcessId `
     | Export-Csv .\services.csv -NoTypeInformation
     
 }
 
 Function Get-LocalAccounts{
+    Prt-SectionHeader "Local User Accounts"
     Get-WmiObject -Class Win32_Useraccount -filter "Localaccount = True" `
     | Select-Object -Property SID,Name,Status,PasswordRequired `
     | Export-CSV -Path .\localaccounts.csv -NoTypeInformation
 }
 
-Function Get-LocalGroupAccounts{
+Function Get-LocalGroups{
+    Prt-SectionHeader "Local Groups"
     Get-WmiObject -Class Win32_Group -Filter "LocalAccount = True" `
     | Select-Object -Property Caption,SID,Name `
     | Export-CSV -Path .\localgroups.csv -NoTypeInformation
 }
 
-Function Get-LocalAccountMembers{
+Function Get-LocalGroupMembers{
+    Prt-SectionHeader "Local Group Memberships"
 
     $gprops = @{'Group Name'='';UserName='';SID=''}
     $gmems_Template = New-Object -TypeName PSObject -Property $gprops
@@ -265,6 +319,7 @@ Function Get-LocalAccountMembers{
 }
 
 Function Get-WinEventLogs{
+    Prt-SectionHeader "Event Log Settings"
     $winlogs = @('Application','Security','System','Windows PowerShell','Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational','Microsoft-Windows-PowerShell/Operational','Microsoft-Windows-WMI-Activity/Operational')
     # Get-WinEvent is available in PSv3
     Get-WinEvent -ListLog $winlogs -ErrorAction SilentlyContinue `
@@ -273,6 +328,7 @@ Function Get-WinEventLogs{
 }
 
 Function Get-SysAVInfo{
+    Prt-SectionHeader "Anti-Virus Status"
 
     try{
         $avstate = @{
@@ -305,6 +361,7 @@ Function Get-SysAVInfo{
 }
 
 Function Get-InterfaceConfig{
+    Prt-SectionHeader "Network Interfaces"
 
     $data = ForEach ($Adapter in (Get-WmiObject -Class Win32_NetworkAdapter -Filter "NetEnabled='True'")){  
         $Config = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter "Index = '$($Adapter.Index)'"
@@ -320,11 +377,13 @@ Function Get-InterfaceConfig{
 }
 
 Function Get-RouteConfig{
-Get-WmiObject -Class win32_IP4RouteTable | Select-Object -Property InterfaceIndex,Destination,Mask,NextHop,Age `
+    Prt-SectionHeader "Network Routes"
+    Get-WmiObject -Class win32_IP4RouteTable | Select-Object -Property InterfaceIndex,Destination,Mask,NextHop,Age `
     | Export-Csv -Path routes.csv -NoTypeInformation
 }
 
 Function Get-SharedFolders {
+    Prt-SectionHeader "File Shares"
     Get-WmiObject -Class Win32_Share | Select-Object -Property Name,Path,Description,Status,Caption `
     | Export-Csv -Path shares.csv -NoTypeInformation
 }
@@ -333,6 +392,9 @@ Function Get-SharedFolders {
 # Main
 #############################
 
+# Configuration Check
+if ($config){ Prt-Config }
+
 # Output Directory
 #############################
 Mkdir-Output $outdir
@@ -340,97 +402,28 @@ Mkdir-Output $outdir
 # Report Header
 #############################
 Prt-ReportHeader
-$sysinfo = ''
 
 #############################
 # Information Collection
 #############################
 
-# Computer Information
-#############################
-$secName = "Computer Information"
-Prt-SectionHeader $secName
-Get-SystemInfo
-
-# Timezone Information
-#############################
-$secName = "Timezone Information"
-Prt-SectionHeader $secName
-Get-TimezoneInfo
-
-# NTP Configuration Information
-#############################
-$secName = "NTP Configuration Information"
-Prt-SectionHeader $secName
-Get-NtpInfo
-
-# Installed Applications
-#############################
-$secName = "Installed Applications"
-Prt-SectionHeader $secName
-Get-InstalledSoftware
-
-# Installed Patches
-#############################
-$secName = "Installed Patches"
-Prt-SectionHeader $secName
-Get-InstalledHotFixes
-
-# Installed Services
-#############################
-$secName = "Installed Services"
-Prt-SectionHeader $secName
-Get-InstalledServices
-
-# Local User Accounts
-#############################
-$secName = "Local User Accounts"
-Prt-SectionHeader $secName
-Get-LocalAccounts
-
-# Local Group Accounts
-#############################
-$secName = "Local Group Accounts"
-Prt-SectionHeader $secName
-Get-LocalGroupAccounts
-
-# Local Group Memberships
-#############################
-$secName = "Local Group Memberships"
-Prt-SectionHeader $secName
-Get-LocalAccountMembers
-
-# Event Log Settings
-#############################
-$secName = "Event Log Settings"
-Prt-SectionHeader $secName
-Get-WinEventLogs
-
-# Anti-Virus Status 
-#############################
-$secName = "Anti-Virus Status"
-Prt-SectionHeader $secName
-Get-SysAVInfo
-
-# Network Interfaces
-#############################
-$secName = "Network Interfaces"
-Prt-SectionHeader $secName
-Get-InterfaceConfig
-
-# Network Routes
-#############################
-$secName = "Network Routes"
-Prt-SectionHeader $secName
-Get-RouteConfig
-
-# File Shares
-#############################
-$secName = "File Shares"
-Prt-SectionHeader $secName
-Get-SharedFolders
+if ($getSysInfo){ Get-SystemInfo }
+if ($getTimeZone){ Get-TimezoneInfo }
+if ($getNTP){ Get-NtpInfo }
+if ($getSoftware){ Get-InstalledSoftware }
+if ($getPatches){ Get-InstalledHotFixes }
+if ($getServices){ Get-InstalledServices }
+if ($getAccounts){ Get-LocalAccounts }
+if ($getGroups){ Get-LocalGroups }
+if ($getGroupMembers){ Get-LocalGroupMembers }
+if ($getLogConfigs){ Get-WinEventLogs }
+if ($getAVInfo){ Get-SysAVInfo }
+if ($getInterfaces){ Get-InterfaceConfig }
+if ($getRoutes){ Get-RouteConfig }
+if ($getShares){ Get-SharedFolders }
 
 # Report Footer
 #############################
 Prt-ReportFooter
 if($cutsec_footer){ Prt-CutSec-ReportFooter }
+Set-Location -Path ..
