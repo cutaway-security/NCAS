@@ -252,7 +252,7 @@ Function Get-InstalledSoftware{
     }
     
     $software_versions = $software_versions  | Sort-Object -Property DisplayName,DisplayVersion -Unique
-    $software_versions | Export-Csv -Append -Path software_uninstallkey.csv -NoTypeInformation
+    $software_versions | Export-Csv -Path software_uninstallkey.csv -NoTypeInformation
 
     # List the directories in the System Drive 
     if (Test-CommandExists Get-ChildItem){
