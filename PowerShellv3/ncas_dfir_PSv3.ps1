@@ -296,7 +296,7 @@ Function Get-SysAVInfo{
         if ($defender_status){
             $defender_status
         }else{
-            Write-Output "No response, possibly disabled."
+            Write-Output "No response, possibly disabled.`n"
         }
     }
 
