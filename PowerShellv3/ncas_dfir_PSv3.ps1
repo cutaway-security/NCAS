@@ -131,7 +131,10 @@ Function Get-SystemInfo{
         $sysdata = $sysinfo | Select-String -Pattern '^OS Version','^OS Name','^System Type','^Domain'  
     }
     $sysdata
-    systeminfo > ${env:computername}_systeminfo_$(Get-Date -Format "yyyyddMM_HHmmss").txt
+    
+    Write-Output "`nCommand Results: systeminfo`n"
+    $sdata = systeminfo
+    $sdata
 }
 
 Function Get-TimezoneInfo{
@@ -195,11 +198,22 @@ Function Get-InstalledSoftware{
 
     # List the directories in the System Drive 
     if (Test-CommandExists Get-ChildItem){
-        $software_dirs = ("$sysdrive\Program Files (x86)\","$sysdrive\Program Files\",$sysdrive)
+        $software_dirs = ("$sysdrive\Program Files (x86)\","$sysdrive\Program Files\","$sysdrive\")
         ForEach ($dir in $software_dirs){
             if (Test-Path -Path $dir){
                 Write-Output "List of Program Directories in $dir"
-                Get-ChildItem -Directory $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime
+                Get-ChildItem -Directory $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime -AutoSize | Out-String -Width 4096
+            }
+        }
+    }
+    
+    # List the directories in logical drives that are not the System Drive 
+    if (Test-CommandExists Get-ChildItem -and Test-CommandExists Get-WmiObject){
+        $logical_drive = ((Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 -and $_.DeviceID -ne $sysdrive }).DeviceID)
+        ForEach ($dir in $logical_drive){
+            if (Test-Path -Path $dir){
+                Write-Output "List of Directories in $dir"
+                Get-ChildItem -Directory $dir | Format-Table -Property FullName,Mode,CreationTime,LastAccessTime,LastWriteTime -AutoSize | Out-String -Width 4096
             }
         }
     }
@@ -278,36 +292,59 @@ Function Get-WinEventLogs{
 Function Get-SysAVInfo{
     if (Test-CommandExists Get-MPComputerStatus){
         Write-Output "# Windows Defender Status"
-        Get-MPComputerStatus
+        $defender_status = Get-MPComputerStatus -ErrorAction SilentlyContinue
+        if ($defender_status){
+            $defender_status
+        }else{
+            Write-Output "No response, possibly disabled.`n"
+        }
     }
 
     try{
-        $avstate = @{
-            "262144" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
-            "262160" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
-            "266240" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
-            "266256" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
-            "393216" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
-            "393232" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
-            "393488" = @{defstatus = "Out of date"; rtstatus = "Disabled"};
-            "397312" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
-            "397328" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
-            "397584" = @{defstatus = "Out of date"; rtstatus = "Enabled"};
-            "397568" = @{defstatus = "Up to date"; rtstatus = "Enabled"};
-            "393472" = @{defstatus = "Up to date"; rtstatus = "Disabled"};
+        # Define AV Product Bit Flags    
+        [Flags()] enum ProductState 
+        {
+            Off         = 0x0000
+            On          = 0x1000
+            Snoozed     = 0x2000
+            Expired     = 0x3000
         }
 
-        $avprodprops = @{'Product Name'='';'Definition Status'='';'Real-Time Protection'='';'Path'=''}
+        [Flags()] enum SignatureStatus
+        {
+            UpToDate     = 0x00
+            OutOfDate    = 0x10
+        }
+
+        [Flags()] enum ProductOwner
+        {
+            NonMs        = 0x000
+            Windows      = 0x100
+        }
+
+        # Define AV Product Bit Masks    
+        [Flags()] enum ProductFlags
+        {
+            SignatureStatus = 0x00F0
+            ProductOwner    = 0x0F00
+            ProductState    = 0xF000
+        }
+
+        $avprodprops = @{'Product Name'='';'Definition Status'='';'Real-Time Protection'='';'ProdOwner'='';'ProdExePath'='';'ReportExePath'=''}
         $avprod_Template = New-Object -TypeName PSObject -Property $avprodprops
         Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct -ErrorAction Stop | ForEach-Object {
+            [UInt32]$state = $_.productState
             $avprod = $avprod_Template.PSObject.Copy()
             $avprod.'Product Name' = $_.displayName
-            $avprod.'Definition Status' = $avstate[[string]$_.productState].defstatus
-            $avprod.'Real-Time Protection' = $avstate[[string]$_.productState].rtstatus
-            $avprod.'Path' = $_.pathToSignedProductExe
+            $avprod.'Definition Status' = [SignatureStatus]($state -band [ProductFlags]::SignatureStatus)
+            $avprod.'Real-Time Protection' = [ProductState]($state -band [ProductFlags]::ProductState)
+            $avprod.'ProdOwner' = [ProductOwner]($state -band [ProductFlags]::ProductOwner)
+            $avprod.'ProdExePath' = $_.pathToSignedProductExe
+            $avprod.'ReportExePath' = $_.pathToSignedReportingExe
         }
+
         Write-Output "# Other Anti-Virus Status"
-        $avprod | Format-Table -Property 'Product Name','Definition Status','Real-Time Protection','Path' -AutoSize | Out-String -Width 4096
+        $avprod | Format-Table -Property 'Product Name','Definition Status','Real-Time Protection','ProdOwner','ProdExePath','ReportExePath' -AutoSize | Out-String -Width 4096
     }Catch{ Write-Output "Other Anti-Virus Status Check Failed" }
 }
 
@@ -388,7 +425,7 @@ Function Get-VulnCheck{
 #############################
 Function Get-EnvInfo{
     # Get all of the current ENV parameters
-    Get-ChildItem env:
+    Get-ChildItem env: | Format-List -Property *
 }
 
 Function Get-TCPServicesInfo{
@@ -525,14 +562,14 @@ Function Get-ProcessMemory{
 Function Get-USBDevices{
     # Get Currently Connected USB Devices - HID and Mass Storage
     Write-Output "`nConnected HID and Mass Storage USB Devices:"
-    Get-CimInstance -ClassName Win32_PnpEntity -ErrorAction SilentlyContinue | Where-Object {($_.DeviceID -like "*hid*") -or ($_.Description -like "*mass*")}| Select-Object -Property DeviceID,Description | Format-Table -AutoSize | Out-String -Width 4096
+    Get-CimInstance -ClassName Win32_PnpEntity -ErrorAction SilentlyContinue | Where-Object {($_.DeviceID -like "*hid*") -or ($_.Description -like "*mass*")}| Select-Object -Property DeviceID,Name,Description,Manufacturer,PNPClass | Format-List -Property *
 
     # Get History of Connected USB Devices - Mass Storage
     Write-Output "`History Mass Storage USB Devices:"
     try {
-        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' -ErrorAction Stop | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR\*\*' -ErrorAction Stop | Select FriendlyName,@{Name="SerialNumber";Expression={($_.PSChildName)}},@{Name="CompatibleIDs";Expression={($_.CompatibleIDs)}} | Format-List -Property *
     } Catch {
-        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USB\*\*' -ErrorAction SilentlyContinue | Where-Object {$_.DeviceDesc -like "*mass*"} | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}} | Format-Table -AutoSize | Out-String -Width 4096
+        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Enum\USB\*\*' -ErrorAction SilentlyContinue | Where-Object {$_.DeviceDesc -like "*mass*"} | Select @{Name="DeviceDesc";Expression={($_.DeviceDesc).split(";")[1]}},@{Name="SerialNumber";Expression={($_.PSChildName)}},@{Name="HardwareID";Expression={($_.HardwareID)[0]}} | Format-List -Property *
     }
 
     # Get History of Connected USB Devices - HID

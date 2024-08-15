@@ -142,6 +142,7 @@ CutSec would like to thank the following people and organizations for contributi
 
 * Tom Liston - Bad Wolf Security, LLC
 * Aaron Crow - [Corvo Security, LLC](https://corvosec.com/)
+* Trae Norman
 
 # Contact
 To request assistance or schedule an assessment, please contact Cutaway Security at 'info [@] cutawaysecurity.com'.

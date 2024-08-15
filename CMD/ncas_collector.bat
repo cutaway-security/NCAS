@@ -6,7 +6,7 @@ rem data from the system using system programs and output to the
 rem text files in a directory named with the hostname, date, and time.
 rem 
 rem Author: Don C. Weber (@cutaway)
-rem Date:   February 26, 2024
+rem Date:   March 1, 2024
 rem 
 rem License: 
 rem Copyright (c) 2024, Cutaway Security, Inc. <dev [@] cutawaysecurity.com>
@@ -25,18 +25,37 @@ rem along with this program.  If not, see <http://www.gnu.org/licenses/>.
 rem Point Of Contact:    Don C. Weber <dev [@] cutawaysecurity.com>
 
 rem ##########################
+rem Collection parameters
+rem To disable a check remove the 'y' at the end of the following lines
+rem Disable check for patches, update line to read 'set PATCHES='
+rem ##########################
+set SYSINFO=y
+set INSTALLEDSOFTWARE=y
+set PATCHES=y
+set PROCESSES=y
+set SERVICES=y
+set TASKS=y
+set LISTENINGSERVICES=y
+set LOCALACCOUNTS=y
+set LOCALGROUPS=y
+set LOCALADMIN=y
+set INTERFACES=y
+set ROUTES=y
+set ARPCACHE=y
+set SHARES=y
+
+rem ##########################
 rem Script behavior parameters
 rem ##########################
 set DEBUG=
-set PRINTORG=y
-set ORG_NAME=Cutaway Security, LLC
-set ORG_CONTACT=dev@cutawaysecurity.com
-set VERSION=0.1
+set PRINTDEV=y
+set VERSION=1.1
+set VER_DATE=20240301
 set HOSTNAME=%COMPUTERNAME%
 
 CALL :getDate STARTSTAMP
 echo ##########################
-echo NCAS Script Started at %STARTSTAMP%
+echo NCAS Script v%VERSION% Started at %STARTSTAMP%
 echo ##########################
 echo.
 
@@ -50,6 +69,7 @@ if %errorlevel% == 0 (
     echo Not running with Administrative privileges. Exiting.
     goto :eof
 )
+echo.
 
 rem ##########################
 rem Create output directory
@@ -64,20 +84,82 @@ IF exist %OUTDIR% (
 )
 echo Script results will be placed in: %OUTDIR%
 cd %OUTDIR%
+echo.
 
 rem ##########################
-echo Get System Information
+rem Get Data
 rem ##########################
-systeminfo > systeminfo.txt
+IF defined SYSINFO CALL :getSysInfo
+IF defined INSTALLEDSOFTWARE CALL :getInstalled
+IF defined PATCHES CALL :getPatches
+IF defined PROCESSES CALL :getProcesses
+IF defined SERVICES CALL :getServices
+IF defined TASKS CALL :getScheduledTasks
+IF defined LISTENINGSERVICES CALL :getListening
+IF defined LOCALACCOUNTS CALL :getLocalAccounts
+IF defined LOCALGROUPS CALL :getLocalGroups
+IF defined LOCALADMIN CALL :getAdminUsers
+IF defined INTERFACES CALL :getInterfaces
+IF defined ROUTES CALL :getNetRoutes
+IF defined ARPCACHE CALL :getARPCache
+IF defined SHARES CALL :getNetShares
 
 rem ##########################
-echo Get Installed Sofware - wmic
+rem Completed
 rem ##########################
-wmic product get Name,Version,Installdate /format:csv > software-wmic.csv
+cd ..
+CALL :getDate ENDSTAMP
+echo.
+echo ##########################
+echo NCAS Script Completed at %ENDSTAMP%
+IF defined PRINTDEV echo Brought to you by Cutaway Security, LLC
+IF defined PRINTDEV echo For assessment and auditing help, contact info [@] cutawaysecurity.com
+IF defined PRINTDEV echo For script help, contact dev [@] cutawaysecurity.com
+echo ##########################
+goto :eof
 
 rem ##########################
-echo Get Installed Sofware - dir
+rem Admin Functions
 rem ##########################
+
+:getDate
+rem ##########################
+rem Get date and time for outputs
+rem ##########################
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "YY=%dt:~2,2%" & set "YYYY=%dt:~0,4%" & set "MM=%dt:~4,2%" & set "DD=%dt:~6,2%"
+set "HH=%dt:~8,2%" & set "Min=%dt:~10,2%" & set "Sec=%dt:~12,2%"
+
+set DATESTAMP=%YYYY%%MM%%DD%
+set TIMESTAMP=%HH%%Min%%Sec%
+set %~1=%DATESTAMP%_%TIMESTAMP%
+goto :eof
+
+:printCollectionHeader
+rem ##########################
+rem Print Collection Header
+rem ##########################
+echo %~1
+
+:isAdmin
+rem ##########################
+rem Check for Administrator Rights
+rem ##########################
+fsutil dirty query %systemdrive% >nul
+goto :eof
+
+rem ##########################
+rem Collection Functions
+rem ##########################
+
+:getInstalled
+CALL :printCollectionHeader "Get Installed Sofware"
+wmic product get Name,Version,Installdate /format:csv > software.csv
+rem NOTE: Add system and user registry HIVE checks here
+
+rem Get Installed Sofware using dir method (does not get version)
+rem NOTE: Use GOTO to skip this code as commented out.
+GOTO EndComment0
 IF EXIST "C:\" (
     echo ##### >> software-dir.txt
     echo "Listing C:\ directory" >> software-dir.txt
@@ -99,145 +181,86 @@ IF EXIST "C:\Program Files (x86)\" (
     dir "C:\Program Files (x86)\" /A:D >> software-dir.txt
     echo. >> software-dir.txt
 )
+:EndComment0
+goto :eof
 
-rem ##########################
-echo Get Installed Patches
-rem ##########################
-wmic qfe get HotFixID,InstalledBy,InstalledOn /format:csv > patches-wmic.csv
+:getSysInfo
+CALL :printCollectionHeader "Get System Information"
+systeminfo > systeminfo.txt
+goto :eof
 
-rem ##########################
-echo Get Auto Started Services
-rem ##########################
-wmic service where StartMode="Auto" get Name,StartName,StartMode,PathName /format:csv > services_auto-wmic.csv
+:getPatches
+CALL :printCollectionHeader "Get Installed Patches"
+wmic qfe get HotFixID,InstalledBy,InstalledOn /format:csv > patches.csv
+goto :eof
 
-rem ##########################
-echo Get All Services
-rem ##########################
-wmic service get Name,StartName,StartMode,PathName /format:csv > services_all-wmic.csv
+:getProcesses
+CALL :printCollectionHeader "Get Running Processes"
+wmic process get Name,ProcessId,ExecutablePath,CommandLine /format:csv > running_processes.csv
+goto :eof
 
-rem ##########################
-echo Get Running Processes - wmic
-rem ##########################
-wmic process get Name,ProcessId,ExecutablePath,CommandLine /format:csv > running_processes-wmic.csv
+:getServices
+CALL :printCollectionHeader "Get Services"
+tasklist /SVC > running_process_services.txt
+wmic service get Name,StartName,StartMode,PathName /format:csv > services_all.csv
+goto :eof
 
-rem ##########################
-echo Get Running Processes - tasklist
-rem ##########################
-tasklist > running_processes-tasklist.txt
+:getScheduledTasks
+CALL :printCollectionHeader "Get Scheduled Tasks"
+schtasks /query /fo csv /v > scheduled_tasks.csv
+goto :eof
 
-rem ##########################
-echo Get Running Process Services - tasklist
-rem ##########################
-tasklist /SVC > running_process_services-tasklist.txt
+:getListening
+CALL :printCollectionHeader "Get Listening Services"
+netstat -ano | find /i "listening" > listening_services.txt
+goto :eof
 
-rem ##########################
-echo Get Scheduled Tasks - schtasks
-rem ##########################
-schtasks /query /fo list /v > scheduled_tasks-schtasks.txt
+:getLocalAccounts
+CALL :printCollectionHeader "Get Local Accounts"
+wmic useraccount get SID,Name,PasswordRequired,Lockout /format:csv > local_accounts.csv
+rem Uncomment these lines to use net command
+rem CALL :printCollectionHeader "Get Local Accounts - net"
+rem net user > local_accounts-net.txt
+goto :eof
 
-rem ##########################
-echo Get Listening Services - netstat
-rem ##########################
-netstat -ano | find /i "listening" > listening_services-netstat.txt
+:getLocalGroups
+CALL :printCollectionHeader "Get Local Groups"
+wmic group get Name,SID /format:csv > localgroups.csv
+rem Uncomment these lines to use net command
+rem CALL :printCollectionHeader "Get Local Groups - net"
+rem net localgroup > localgroups-net.txt
+goto :eof
 
-rem ##########################
-echo Get Network Connections - netstat
-rem ##########################
-netstat -anob > network_connections-netstat.txt
+:getAdminUsers
+CALL :printCollectionHeader "Get Local Administrators"
+wmic path win32_groupuser where (groupcomponent="win32_group.name=\"administrators\",domain=\"%Computername%\"") > local_admins.txt
+rem Uncomment these lines to use net command
+rem CALL :printCollectionHeader "Get Local Administrators - net"
+rem net localgroup Administrators > localgroups_admins-net.txt
+goto :eof
 
-rem ##########################
-echo Get Local User Accounts - wmic
-rem ##########################
-wmic useraccount get SID,Name,PasswordRequired,Lockout /format:csv > local_accounts-wmic.csv
+:getInterfaces
+CALL :printCollectionHeader "Get Network Interfaces"
+wmic NICCONFIG where IPEnabled='true' get DefaultIPGateway,Description,DHCPServer,DNSServerSearchOrder,IPAddress,IPSubnet,MACAddress /format:csv > network_interfaces.csv
+rem Uncomment these lines to use net command
+rem CALL :printCollectionHeader "Get Network Interfaces - ipconfig"
+rem ipconfig /all > network_interfaces-ipconfig.txt
+goto :eof
 
-rem ##########################
-echo Get Local User Accounts - net 
-rem ##########################
-net user > local_accounts-net.txt
+:getNetRoutes
+CALL :printCollectionHeader "Get Network Routes"
+route PRINT > network_routes.txt
+goto :eof
 
-rem ##########################
-echo Get Local Groups - wmic
-rem ##########################
-wmic group get Name,SID /format:csv > localgroups-wmic.csv
-
-rem ##########################
-echo Get Local Groups - net 
-rem ##########################
-net localgroup > localgroups-net.txt
-
-rem ##########################
-echo Get Local Administrators - wmic
-rem ##########################
-wmic path win32_groupuser where (groupcomponent="win32_group.name=\"administrators\",domain=\"%Computername%\"") > local_admins-wmic.txt
-
-rem ##########################
-echo Get Local Administrators - net
-rem ##########################
-net localgroup Administrators > localgroups_admins-net.txt
-
-rem ##########################
-echo Get Network Interfaces - wmic
-rem ##########################
-wmic nicconfig where ipenabled=true get Description,Index,MACAddress,IPAddress,IPSubnet,DefaultIPGateway,DNSServerSearchOrder /format:csv > network_interfaces-wmic.csv
-
-rem ##########################
-echo Get Network Interfaces - ipconfig
-rem ##########################
-ipconfig /all > network_interfaces-ipconfig.txt
-
-rem ##########################
-echo Get Network Routes - route
-rem ##########################
-route PRINT > network_routes-route.txt
-
-rem ##########################
-echo Get Local Network Addresses - arp
-rem ##########################
+:getARPCache
+CALL :printCollectionHeader "Get ARP Cache"
 arp -a > arp.txt
-
-rem ##########################
-echo Get Network Shares - wmic
-rem ##########################
-wmic share get Name,Path,Description /format:csv > shares-wmic.csv
-
-rem ##########################
-echo Get Network Shares - net
-rem ##########################
-net share > shares-net.txt
-
-rem ##########################
-rem Completed
-rem ##########################
-cd ..
-CALL :getDate ENDSTAMP
-echo.
-echo ##########################
-echo NCAS Script Completed at %ENDSTAMP%
-IF defined PRINTORG echo Brought to you by %ORG_NAME%
-IF defined PRINTORG echo Contact %ORG_CONTACT% with any questions or requests.
-echo ##########################
 goto :eof
 
-rem ##########################
-rem Functions
-rem ##########################
-
-:getDate
-rem ##########################
-rem Get date and time for outputs
-rem ##########################
-for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
-set "YY=%dt:~2,2%" & set "YYYY=%dt:~0,4%" & set "MM=%dt:~4,2%" & set "DD=%dt:~6,2%"
-set "HH=%dt:~8,2%" & set "Min=%dt:~10,2%" & set "Sec=%dt:~12,2%"
-
-set DATESTAMP=%YYYY%%MM%%DD%
-set TIMESTAMP=%HH%%Min%%Sec%
-set %~1=%DATESTAMP%_%TIMESTAMP%
-goto :eof
-
-:isAdmin
-rem ##########################
-rem Check for Administrator Rights
-rem ##########################
-fsutil dirty query %systemdrive% >nul
+:getNetShares
+CALL :printCollectionHeader "Get Network Shares"
+wmic share get Name,Path,Description /format:csv > shares.csv
+rem Uncomment these lines to use net command
+rem CALL :printCollectionHeader "Get Network Shares - net"
+rem net share > shares-net.txt
 goto :eof
