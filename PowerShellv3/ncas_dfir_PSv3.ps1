@@ -292,7 +292,11 @@ Function Get-WinEventLogs{
 Function Get-SysAVInfo{
     if (Test-CommandExists Get-MPComputerStatus){
         Write-Output "# Windows Defender Status"
-        Get-MPComputerStatus
+        try{
+            Get-MPComputerStatus -ErrorAction SilentlyContinue
+        }Catch{
+            Write-Output "No response, possibly disabled."
+        }
     }
 
     try{
